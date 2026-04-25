@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Transferência de Propriedade - DLM</title>
+    <link rel="stylesheet" href="./style/style.css">
+    <script src="./venda.js" defet type="module"></script>
+</head>
+<body>
+    <header>
+        <div class="logo"><a href="index.html">DLM Market</a></div>
+    </header>
+    <main>
+        <h2>Transferir Livro (DLM)</h2>
+        <div class="form-card">
+            <div id="detalhes-livro"></div>
+            <hr>
+            <form id="form-transferir">
+                <label>CPF do Destinatário:</label>
+                <input type="text" id="cpf-destino" placeholder="000.000.000-00" required>
+                <p style="font-size: 0.75em; color: #666;">* A transferência é permanente e remove o livro da sua conta.</p>
+                <button type="submit" class="btn-primary">Confirmar Transferência</button>
+                <button type="button" onclick="history.back()" class="btn-close">Cancelar</button>
+            </form>
+        </div>
+    </main>
+
+    <script type="module">
+        document.addEventListener('DOMContentLoaded', () => {
+            const params = new URLSearchParams(window.location.search);
+            const livroId = params.get('id');
+            const userLogado = JSON.parse(localStorage.getItem('utilizadorLogado'));
+            
+            const livro = userLogado.biblioteca.find(l => l.id == livroId);
+
+            if (livro) {
+                document.getElementById('detalhes-livro').innerHTML = `
+                    <p>Livro: <strong>${livro.nome}</strong></p>
+                    <p>Autor Original: ${livro.autor}</p>
+                `;
+            }
+
+            document.getElementById('form-transferir').onsubmit = (e) => {
+                e.preventDefault();
+                const cpfDestino = document.getElementById('cpf-destino').value.trim();
+
+                // Simulando a lógica DLM (Blockchain):
+                // 1. Em um sistema real, buscaríamos o usuário com este CPF no banco.
+                // 2. Aqui, como só temos um usuário no localStorage para teste, 
+                // vamos apenas simular a remoção da sua conta.
+
+                if(cpfDestino === userLogado.cpf) {
+                    alert("Você não pode transferir para si mesmo!");
+                    return;
+                }
+
+                // Remove o livro da biblioteca do logado
+                userLogado.biblioteca = userLogado.biblioteca.filter(l => l.id != livroId);
+                localStorage.setItem('utilizadorLogado', JSON.stringify(userLogado));
+
+                alert(`Sucesso! O livro foi transferido para o CPF ${cpfDestino} e removido da sua biblioteca.`);
+                window.location.href = 'usuario.html';
+            };
+        });
+    </script>
+</body>
+</html>
