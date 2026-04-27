@@ -2,6 +2,8 @@
  * Utilitários de Criptografia (Simulação de DRM/DLM)
  * Converte o arquivo em uma String Protegida
  */
+
+
 async function encriptarArquivo(file) {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -15,6 +17,66 @@ async function encriptarArquivo(file) {
         reader.readAsDataURL(file);
     });
 }
+
+
+
+function abrirPDF(base64Data) {
+    try {
+        const base64 = base64Data.split(',')[1]; // remove "data:application/pdf;base64,"
+
+        const byteCharacters = atob(base64);
+        const byteNumbers = new Array(byteCharacters.length);
+
+        for (let i = 0; i < byteCharacters.length; i++) {
+            byteNumbers[i] = byteCharacters.charCodeAt(i);
+        }
+
+        const byteArray = new Uint8Array(byteNumbers);
+        const blob = new Blob([byteArray], { type: 'application/pdf' });
+
+        const url = URL.createObjectURL(blob);
+        window.open(url);
+
+    } catch (e) {
+        console.error("Erro ao abrir PDF:", e);
+        alert("Erro ao abrir o arquivo. Dados corrompidos.");
+    }
+}
+
+window.abrirPDFPorId = function(id) {
+    const user = JSON.parse(localStorage.getItem('utilizadorLogado'));
+    const mercado = JSON.parse(localStorage.getItem('livrosMarketplace')) || [];
+
+    let livro = user?.biblioteca?.find(l => l.id == id);
+
+    if (!livro) {
+        livro = mercado.find(l => l.id == id);
+    }
+
+    if (!livro) {
+        alert("Livro não encontrado.");
+        return;
+    }
+
+    console.log("Livro encontrado:", livro);
+
+    // CASO 1: livro com base64 (upload)
+    if (livro.conteudoBinario) {
+        abrirPDF(livro.conteudoBinario);
+        return;
+    }
+
+    // CASO 2: livro com caminho local
+    if (livro.caminhoPdf) {
+        window.open(livro.caminhoPdf);
+        return;
+    }
+
+    // 🚨 fallback
+    alert("Este livro não possui conteúdo disponível.");
+};
+
+window.abrirPDFPorId = abrirPDFPorId;
 
 document.addEventListener('DOMContentLoaded', () => {
     // 1. Verificação de Sessão
@@ -93,7 +155,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <td>${livro.nome}</td>
                 <td>R$ ${livro.preco.toFixed(2)}</td>
                 <td>
-                    <button class="btn-read" onclick="window.open('${livro.conteudoBinario}')">
+                    <button class="btn-read" onclick="abrirPDFPorId(${livro.id})">
                         Ver Original
                     </button>
                 </td>
@@ -119,7 +181,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <td>${livro.autor}</td>
                 <td>
                     <button class="btn-read" style="background:#3498db" 
-                        onclick="window.open('${livro.conteudoBinario}')">
+                        onclick="abrirPDFPorId(${livro.id})">
                         Abrir PDF (DLM)
                     </button>
                 </td>

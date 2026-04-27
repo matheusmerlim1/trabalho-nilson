@@ -5,20 +5,20 @@ export const livrosDisponiveis = [
         nome: "DLM: Uma proposta para empréstimo digital", 
         autor: "Lazarin et al.", 
         preco: 45.00,
-        caminhoPdf: "livro/Lazarin - 2019 - DLM Uma proposta para empréstimo digital.pdf" 
+        caminhoPdf: "livros/Lazarin - 2019 - DLM Uma proposta para empréstimo digital.pdf" 
     },
     { 
         id: 2, 
         nome: "Gestão de Direitos com Smart Contracts", 
         autor: "Oliveira e Lazarin", 
         preco: 50.00,
-        caminhoPdf: "livro/Oliveira e Lazarin - 2020 - Gestão de Direitos Digitais através de Contratos I.pdf" 
+        caminhoPdf: "livros/Oliveira e Lazarin - 2020 - Gestão de Direitos Digitais através de Contratos I.pdf" 
     },
     { 
         id: 3, 
         nome: "Digital Left Management: Proposta", 
         autor: "Henrique Oliveira", 
         preco: 35.50,
-        caminhoPdf: "livro/oliveira_2021_monografia.pdf" 
+        caminhoPdf: "livros/oliveira_2021_monografia.pdf" 
     }
 ];
