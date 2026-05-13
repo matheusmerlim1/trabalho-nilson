@@ -2,6 +2,10 @@
 DLM PDF API/
 Site proposta 1/
 
+# Arquivos soltos na raiz que não pertencem ao repo
+dados.js
+usuario.js
+
 # PDFs acadêmicos soltos na raiz
 *.pdf
 
