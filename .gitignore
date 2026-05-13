@@ -1,0 +1,17 @@
+# Outros projetos na mesma pasta — cada um tem seu próprio repo
+DLM PDF API/
+Site proposta 1/
+
+# PDFs acadêmicos soltos na raiz
+*.pdf
+
+# Dependências
+node_modules/
+
+# Variáveis de ambiente
+.env
+*.env
+
+# OS
+.DS_Store
+Thumbs.db
