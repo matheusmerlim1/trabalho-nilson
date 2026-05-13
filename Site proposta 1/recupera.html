@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Recuperar Senha - DLM Market</title>
+    <link rel="stylesheet" href="./style/style.css">
+    <script src="./recupera.js" type="module" defer></script>
+</head>
+<body>
+    <header>
+        <div class="logo"><a href="index.html">DLM Market</a></div>
+    </header>
+    <main>
+        <div class="form-card">
+            <h1>Recuperar Senha</h1>
+            <p>Informe seus dados cadastrados para definir uma nova senha.</p>
+            
+            <form id="formRecupera">
+                <label>Nome de Usuário (Exatamente como cadastrado)</label>
+                <input type="text" id="nomeRecupera" required>
+                
+                <label>CPF</label>
+                <input type="text" id="cpfRecupera" placeholder="000.000.000-00" required>
+                
+                <hr style="margin: 20px 0; border: 0; border-top: 1px solid #eee;">
+                
+                <label>Nova Senha</label>
+                <input type="password" id="novaSenha" required>
+
+                <label>Confirmar Nova Senha</label>
+                <input type="password" id="confirmarNovaSenha" required>
+
+                <button type="submit" class="btn-primary">Atualizar Senha</button>
+                <button type="button" onclick="window.location.href='index.html'" class="btn-close">Cancelar</button>
+            </form>
+        </div>
+    </main>
+</body>
+</html>

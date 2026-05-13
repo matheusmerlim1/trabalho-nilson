@@ -7,7 +7,7 @@
 'use strict';
 
 // ── Configuração ──────────────────────────────────────────────────────────────
-const API_BASE = window.DLM_API_BASE || 'http://localhost:3000/api/v1';
+const API_BASE = window.DLM_API_BASE || 'https://dlm-pdf-server-production.up.railway.app/api/v1';
 
 // ── Autenticação local ────────────────────────────────────────────────────────
 const Auth = {
