@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>LivrosDLM — Catálogo</title>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Inter:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../css/style.css"/>
+  <style>
+    .catalog-wrap { padding:2rem; max-width:1200px; margin:0 auto; }
+    .filters { display:flex; flex-wrap:wrap; align-items:center; gap:.75rem; margin-bottom:1.75rem; }
+    .search-input { flex:1; min-width:220px; padding:.6rem .9rem; border:1px solid var(--border); border-radius:var(--radius-sm); font-family:var(--sans); font-size:.88rem; color:var(--ink); background:var(--surface); outline:none; transition:border-color .15s; }
+    .search-input:focus { border-color:var(--accent); }
+    .filter-chip { padding:.3rem .75rem; border:1px solid var(--border); border-radius:99px; font-size:.75rem; font-weight:500; cursor:pointer; background:var(--surface); color:var(--muted); transition:all .15s; }
+    .filter-chip.active,.filter-chip:hover { background:var(--accent); color:#fff; border-color:var(--accent); }
+    .results-count { font-size:.8rem; color:var(--muted); }
+  </style>
+</head>
+<body>
+
+<nav class="navbar">
+  <a href="../index.html" class="nav-brand">📚 Livros<span>DLM</span></a>
+  <ul class="nav-links">
+    <li><a href="../index.html">Início</a></li>
+    <li><a href="catalog.html" class="active">Catálogo</a></li>
+    <li><a href="biblioteca.html">Minha Biblioteca</a></li>
+    <li><a href="publisher.html">Editora</a></li>
+  </ul>
+  <div class="nav-right">
+    <span class="nav-wallet" id="nav-wallet"></span>
+    <a href="auth.html" class="btn btn-primary btn-sm" id="nav-login-btn">🦊 Entrar</a>
+    <button class="btn btn-ghost btn-sm" id="nav-logout-btn" style="display:none">Sair</button>
+  </div>
+</nav>
+
+<div class="page-header">
+  <h1>Catálogo</h1>
+  <p>Todos os e-books disponíveis na plataforma</p>
+</div>
+
+<div class="catalog-wrap">
+  <div class="filters">
+    <input type="text" class="search-input" id="search" placeholder="Buscar por título ou autor..."/>
+    <div id="genre-filters"></div>
+    <span class="results-count" id="results-count"></span>
+  </div>
+  <div class="books-grid" id="catalog-grid"></div>
+  <div id="no-results" style="display:none">
+    <div class="empty-state">
+      <div class="empty-icon">🔍</div>
+      <h3>Nenhum resultado encontrado</h3>
+      <p>Tente uma busca diferente.</p>
+    </div>
+  </div>
+</div>
+
+<div id="toast-container"></div>
+<script src="../js/api.js"></script>
+<script src="../js/app.js"></script>
+<script>
+const { APIBooks } = window.DLM;
+let activeGenre = 'Todos';
+
+const params = new URLSearchParams(window.location.search);
+const initQuery = params.get('q') || '';
+
+document.addEventListener('DOMContentLoaded', () => {
+  const books  = APIBooks.getAll();
+  const genres = ['Todos', ...new Set(books.map(b => b.genre).filter(Boolean))];
+
+  // Filtros de gênero
+  const gf = document.getElementById('genre-filters');
+  gf.style.display = 'flex'; gf.style.flexWrap = 'wrap'; gf.style.gap = '.5rem';
+  genres.forEach(g => {
+    const chip = document.createElement('button');
+    chip.className = 'filter-chip' + (g === 'Todos' ? ' active' : '');
+    chip.textContent = g;
+    chip.addEventListener('click', () => {
+      activeGenre = g;
+      document.querySelectorAll('.filter-chip').forEach(c => c.classList.toggle('active', c.textContent === g));
+      render();
+    });
+    gf.appendChild(chip);
+  });
+
+  if (initQuery) document.getElementById('search').value = initQuery;
+  document.getElementById('search').addEventListener('input', render);
+  render();
+});
+
+function render() {
+  const q      = document.getElementById('search').value.toLowerCase().trim();
+  const books  = APIBooks.getAll().filter(b => {
+    const matchQ = !q || b.title.toLowerCase().includes(q) || b.author.toLowerCase().includes(q);
+    const matchG = activeGenre === 'Todos' || b.genre === activeGenre;
+    return matchQ && matchG;
+  });
+
+  const grid = document.getElementById('catalog-grid');
+  const none = document.getElementById('no-results');
+  const colors = ['#1e3a5f','#78350f','#3b0764','#1c1917','#7c3aed','#15803d','#9d174d'];
+
+  document.getElementById('results-count').textContent = `${books.length} livro(s) encontrado(s)`;
+
+  if (books.length === 0) { grid.innerHTML = ''; none.style.display = 'block'; return; }
+  none.style.display = 'none';
+
+  grid.innerHTML = books.map(book => {
+    const color = book.color || colors[book.id % colors.length];
+    return `
+      <a class="book-card" href="livro.html?id=${book.id}">
+        <div class="book-cover">
+          <div class="book-cover-placeholder" style="background:${color}">
+            <div class="book-emoji">${book.emoji||'📚'}</div>
+            <div class="book-initials" style="color:rgba(255,255,255,.7)">${book.title}</div>
+          </div>
+          <div class="book-badge">DLM</div>
+        </div>
+        <div class="book-info">
+          <div class="book-title">${book.title}</div>
+          <div class="book-author">${book.author}</div>
+          <div style="margin-top:.3rem"><span class="badge badge-gray" style="font-size:.6rem">${book.genre||''}</span></div>
+          <div class="book-price">${formatPrice(book.price)}</div>
+        </div>
+      </a>`;
+  }).join('');
+}
+</script>
+</body>
+</html>

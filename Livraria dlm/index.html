@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>DLM Bookstore — Livraria Digital Blockchain</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --ink:#0d0d0d;--paper:#f5f0e8;--cream:#ede8dc;
+  --gold:#b8860b;--gold-lt:#d4a017;
+  --chain:#1a3a5c;--chain-lt:#2563a8;
+  --muted:#6b6050;--danger:#8b2020;--success:#1a5c3a;
+  --border:rgba(13,13,13,0.12);--r:4px;
+  --shadow:0 2px 16px rgba(13,13,13,0.10);
+}
+body{font-family:'DM Sans',sans-serif;background:var(--paper);color:var(--ink);min-height:100vh;font-size:15px}
+h1,h2,h3{font-family:'Playfair Display',serif}
+.mono{font-family:'DM Mono',monospace;font-size:.78em}
+
+/* Header */
+header{background:var(--ink);color:var(--paper);padding:0 2rem;height:64px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;border-bottom:2px solid var(--gold)}
+.logo{font-family:'Playfair Display',serif;font-size:1.5rem;letter-spacing:.04em}
+.logo span{color:var(--gold)}
+.header-right{display:flex;align-items:center;gap:.8rem;flex-wrap:wrap}
+#wallet-badge{font-family:'DM Mono',monospace;font-size:.72em;background:rgba(184,134,11,.15);border:1px solid var(--gold);color:var(--gold-lt);padding:4px 10px;border-radius:2px;display:none}
+#user-badge{font-size:.85em;color:var(--paper);opacity:.8;display:none}
+
+/* Nav */
+nav{background:var(--cream);border-bottom:1px solid var(--border);display:flex;padding:0 2rem;overflow-x:auto}
+nav button{background:none;border:none;border-bottom:3px solid transparent;color:var(--muted);cursor:pointer;font-family:'DM Sans',sans-serif;font-size:.85em;font-weight:500;letter-spacing:.06em;padding:13px 18px;text-transform:uppercase;transition:all .2s;white-space:nowrap}
+nav button:hover{color:var(--ink)}
+nav button.active{color:var(--ink);border-bottom-color:var(--gold)}
+
+/* Main */
+main{max-width:1100px;margin:0 auto;padding:2.5rem 2rem}
+.page{display:none}
+.page.active{display:block}
+
+/* Cards */
+.card{background:#fff;border:1px solid var(--border);border-radius:var(--r);box-shadow:var(--shadow);padding:2rem}
+.card-title{font-size:1.4rem;margin-bottom:1.4rem;display:flex;align-items:center;gap:.6rem}
+
+/* Auth */
+.auth-wrap{display:grid;grid-template-columns:1fr 1fr;gap:2rem}
+@media(max-width:700px){.auth-wrap{grid-template-columns:1fr}}
+
+/* Forms */
+.form-group{margin-bottom:1.1rem}
+label{display:block;font-size:.76em;font-weight:500;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:5px}
+input,select,textarea{width:100%;border:1px solid var(--border);border-radius:var(--r);background:var(--paper);color:var(--ink);font-family:'DM Sans',sans-serif;font-size:.95em;padding:10px 14px;transition:border-color .2s;outline:none}
+input:focus,select:focus{border-color:var(--chain-lt);background:#fff}
+.wallet-input{font-family:'DM Mono',monospace!important;font-size:.78em!important}
+
+/* Buttons */
+.btn{border:none;border-radius:var(--r);cursor:pointer;font-family:'DM Sans',sans-serif;font-size:.85em;font-weight:500;letter-spacing:.06em;padding:10px 20px;text-transform:uppercase;transition:all .2s}
+.btn-primary{background:var(--ink);color:var(--paper)}.btn-primary:hover{background:var(--chain)}
+.btn-gold{background:var(--gold);color:#fff}.btn-gold:hover{background:var(--gold-lt)}
+.btn-outline{background:transparent;border:1px solid var(--border);color:var(--ink)}.btn-outline:hover{border-color:var(--ink)}
+.btn-danger{background:var(--danger);color:#fff}
+.btn-success{background:var(--success);color:#fff}
+.btn-chain{background:var(--chain);color:#fff}.btn-chain:hover{background:var(--chain-lt)}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn-sm{padding:6px 13px;font-size:.76em}
+.btn-full{width:100%}
+
+/* Book Grid */
+.book-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:1.5rem;margin-top:1.5rem}
+.book-card{background:#fff;border:1px solid var(--border);border-radius:var(--r);overflow:hidden;transition:transform .2s,box-shadow .2s}
+.book-card:hover{transform:translateY(-3px);box-shadow:0 8px 24px rgba(13,13,13,.14)}
+.book-cover{height:155px;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden}
+.book-cover-inner{text-align:center;color:var(--paper);padding:1rem}
+.cover-title{font-family:'Playfair Display',serif;font-size:.92rem;line-height:1.3}
+.cover-author{font-size:.7em;opacity:.6;margin-top:5px}
+.book-cover-accent{position:absolute;bottom:0;left:0;right:0;height:3px;background:var(--gold)}
+.book-info{padding:.9rem}
+.book-price{font-family:'DM Mono',monospace;font-size:.8em;color:var(--chain);font-weight:500}
+.book-id{font-size:.68em;color:var(--muted);margin-bottom:6px}
+.book-actions{display:flex;gap:5px;margin-top:8px;flex-wrap:wrap}
+
+/* My Books */
+.my-book-item{display:grid;grid-template-columns:1fr auto;align-items:center;gap:1rem;padding:1.2rem;border:1px solid var(--border);border-radius:var(--r);background:#fff;margin-bottom:.8rem}
+.my-book-title{font-family:'Playfair Display',serif;font-size:1.05rem}
+.my-book-meta{font-size:.76em;color:var(--muted);margin-top:3px}
+.tag{display:inline-block;font-size:.66em;font-weight:500;letter-spacing:.06em;padding:2px 7px;border-radius:2px;text-transform:uppercase;margin-left:5px}
+.tag-sale{background:#fff3cd;color:#7a5a00;border:1px solid #e6c200}
+.tag-owned{background:#d4edda;color:#1a5c3a;border:1px solid #57b07c}
+.tag-drm{background:#e8d5f5;color:#5a1a7c;border:1px solid #b07cd4}
+
+/* Alerts */
+.alert{border-radius:var(--r);font-size:.86em;margin-bottom:1rem;padding:11px 15px}
+.alert-success{background:#d4edda;border:1px solid #57b07c;color:#1a5c3a}
+.alert-error{background:#f8d7da;border:1px solid #e07070;color:var(--danger)}
+.alert-info{background:#d1ecf1;border:1px solid #5db8cc;color:#0c5460}
+
+/* Tx hash */
+.tx-hash{font-family:'DM Mono',monospace;font-size:.68em;color:var(--chain-lt);word-break:break-all;margin-top:3px}
+
+/* Section */
+.section-header{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:1.5rem}
+.section-title{font-family:'Playfair Display',serif;font-size:1.6rem}
+.empty-state{text-align:center;padding:3rem;color:var(--muted)}
+.empty-icon{font-size:3rem;margin-bottom:1rem}
+.divider{border:none;border-top:1px solid var(--border);margin:1.5rem 0}
+
+/* Chain badge */
+.chain-badge{display:inline-flex;align-items:center;gap:5px;font-family:'DM Mono',monospace;font-size:.7em;background:var(--chain);color:#fff;padding:3px 8px;border-radius:2px}
+.chain-dot{width:6px;height:6px;background:#4ade80;border-radius:50%;animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+
+/* Spinner */
+.spinner{display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:5px}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* Modal */
+.modal-overlay{position:fixed;inset:0;background:rgba(13,13,13,.6);backdrop-filter:blur(3px);z-index:200;display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity .2s}
+.modal-overlay.open{opacity:1;pointer-events:all}
+.modal{background:#fff;border-radius:6px;border-top:4px solid var(--gold);box-shadow:0 20px 60px rgba(13,13,13,.3);max-width:500px;width:92%;padding:2rem;transform:translateY(20px);transition:transform .2s}
+.modal-overlay.open .modal{transform:translateY(0)}
+.modal-title{font-family:'Playfair Display',serif;font-size:1.3rem;margin-bottom:1.2rem}
+.modal-actions{display:flex;gap:.8rem;margin-top:1.4rem;justify-content:flex-end}
+
+/* Tab toggle */
+.tab-toggle{display:flex;border:1px solid var(--border);border-radius:var(--r);overflow:hidden;margin-bottom:1rem}
+.tab-toggle button{flex:1;background:none;border:none;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:.8em;font-weight:500;padding:9px;transition:all .2s;color:var(--muted)}
+.tab-toggle button.active{background:var(--ink);color:var(--paper)}
+
+/* PDF Viewer */
+.pdf-viewer{position:fixed;inset:0;background:rgba(5,10,20,.95);z-index:300;display:none;flex-direction:column}
+.pdf-viewer.open{display:flex}
+.pdf-toolbar{background:#111;color:#fff;padding:.8rem 1.5rem;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid rgba(184,134,11,.4)}
+.pdf-toolbar-title{font-family:'Playfair Display',serif;font-size:1.1rem;color:var(--gold-lt)}
+.pdf-frame{flex:1;border:none;width:100%;background:#fff}
+.drm-badge{font-family:'DM Mono',monospace;font-size:.68em;background:rgba(184,134,11,.15);border:1px solid var(--gold);color:var(--gold-lt);padding:3px 9px;border-radius:2px}
+
+/* Marketplace item */
+.listing-item{display:grid;grid-template-columns:1fr auto;align-items:center;gap:1rem;padding:1.2rem;border:1px solid var(--border);border-radius:var(--r);background:#fff;margin-bottom:.8rem}
+.listing-price{font-family:'DM Mono',monospace;font-size:.9em;color:var(--chain);font-weight:500}
+
+/* Info box */
+.info-box{background:var(--cream);border-left:3px solid var(--gold);border-radius:0 var(--r) var(--r) 0;padding:1rem 1.2rem;font-size:.82em;color:var(--muted);line-height:1.6;margin-bottom:1.5rem}
+.info-box strong{color:var(--ink)}
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<header>
+  <div class="logo">DLM <span>Bookstore</span></div>
+  <div class="header-right">
+    <span class="chain-badge"><span class="chain-dot"></span>Ethereum Sepolia</span>
+    <span id="user-badge"></span>
+    <span id="wallet-badge"></span>
+    <button class="btn btn-outline btn-sm" id="logout-btn" style="display:none;color:#fff;border-color:rgba(255,255,255,.3)" onclick="logout()">Sair</button>
+  </div>
+</header>
+
+<!-- Nav -->
+<nav id="main-nav" style="display:none">
+  <button class="active" onclick="showPage('catalog',this)">📚 Catálogo</button>
+  <button onclick="showPage('mybooks',this)">📖 Minha Biblioteca</button>
+  <button onclick="showPage('marketplace',this)">🔄 Marketplace C2C</button>
+  <button onclick="showPage('transfer',this)">↗️ Transferir / Vender</button>
+  <button onclick="showPage('admin',this)">🔧 Admin</button>
+</nav>
+
+<main>
+
+<!-- ── AUTH ──────────────────────────────────────────────────────────────── -->
+<div id="page-auth" class="page active">
+  <div style="max-width:820px;margin:0 auto">
+    <div style="text-align:center;margin-bottom:2.5rem">
+      <h1 style="font-size:2.8rem;line-height:1.1">DLM <em>Bookstore</em></h1>
+      <p style="color:var(--muted);margin-top:.6rem">Livraria digital com posse real em Blockchain Ethereum · PDFs protegidos com AES-256</p>
+    </div>
+    <div class="auth-wrap">
+      <div class="card">
+        <h2 class="card-title">🔑 Entrar</h2>
+        <div id="login-msg"></div>
+        <div class="form-group"><label>Username</label><input type="text" id="login-username" placeholder="seu_usuario"/></div>
+        <div class="form-group"><label>Senha</label><input type="password" id="login-password" placeholder="••••••••"/></div>
+        <button class="btn btn-primary btn-full" onclick="doLogin(this)">Entrar</button>
+      </div>
+      <div class="card">
+        <h2 class="card-title">✨ Criar Conta</h2>
+        <div id="register-msg"></div>
+        <div class="form-group"><label>Username</label><input type="text" id="reg-username" placeholder="seu_usuario"/></div>
+        <div class="form-group"><label>Email</label><input type="email" id="reg-email" placeholder="voce@email.com"/></div>
+        <div class="form-group"><label>Senha</label><input type="password" id="reg-password" placeholder="mínimo 6 caracteres"/></div>
+        <div class="form-group">
+          <label>Chave Pública Ethereum (Endereço da Wallet)</label>
+          <input type="text" id="reg-wallet" class="wallet-input" placeholder="0xSuaCarteiraEthereum..."/>
+          <small style="color:var(--muted);font-size:.72em;margin-top:4px;display:block">Seu endereço Ethereum (MetaMask → copie o endereço). Nunca informe sua chave privada.</small>
+        </div>
+        <button class="btn btn-gold btn-full" onclick="doRegister(this)">Criar Conta &amp; Registrar na Blockchain</button>
+      </div>
+    </div>
+    <div class="info-box" style="margin-top:1.5rem">
+      <strong>🔐 Como funciona o DRM da DLM?</strong><br/>
+      Cada PDF é cifrado com <strong>AES-256-CBC</strong> no servidor antes de ser salvo. A chave de decriptação fica no servidor e <em>nunca</em> é exposta. 
+      Quando você lê um livro, o servidor verifica se seu endereço Ethereum é o titular do NFT <strong>on-chain</strong> e só então descriptografa o PDF na memória RAM, enviando-o diretamente ao seu browser. 
+      Ao transferir ou vender, o antigo dono perde o acesso automaticamente — a blockchain é a fonte de verdade.
+    </div>
+  </div>
+</div>
+
+<!-- ── CATALOG ────────────────────────────────────────────────────────────── -->
+<div id="page-catalog" class="page">
+  <div class="section-header">
+    <h2 class="section-title">Catálogo de Livros</h2>
+    <button class="btn btn-outline btn-sm" onclick="loadCatalog()">↻ Atualizar</button>
+  </div>
+  <div id="catalog-msg"></div>
+  <div id="catalog-grid" class="book-grid">
+    <div class="empty-state"><div class="empty-icon">⏳</div>Carregando...</div>
+  </div>
+</div>
+
+<!-- ── MY BOOKS ───────────────────────────────────────────────────────────── -->
+<div id="page-mybooks" class="page">
+  <div class="section-header">
+    <h2 class="section-title">Minha Biblioteca</h2>
+    <button class="btn btn-outline btn-sm" onclick="loadMyBooks()">↻ Atualizar</button>
+  </div>
+  <div id="mybooks-msg"></div>
+  <div id="mybooks-list"><div class="empty-state"><div class="empty-icon">⏳</div>Carregando...</div></div>
+</div>
+
+<!-- ── MARKETPLACE ────────────────────────────────────────────────────────── -->
+<div id="page-marketplace" class="page">
+  <div class="section-header">
+    <h2 class="section-title">Marketplace C2C</h2>
+    <button class="btn btn-outline btn-sm" onclick="loadMarketplace()">↻ Atualizar</button>
+  </div>
+  <div class="info-box"><strong>Revenda entre usuários.</strong> 90% do valor vai ao vendedor · 10% de taxa à DLM · Posse transferida via NFT na blockchain.</div>
+  <div id="marketplace-msg"></div>
+  <div id="marketplace-list"><div class="empty-state"><div class="empty-icon">⏳</div>Carregando...</div></div>
+</div>
+
+<!-- ── TRANSFER / SELL ─────────────────────────────────────────────────────── -->
+<div id="page-transfer" class="page">
+  <div style="max-width:620px">
+    <h2 class="section-title" style="margin-bottom:1.5rem">Transferir / Vender Livro</h2>
+
+    <div class="card" style="margin-bottom:1.5rem">
+      <h3 style="font-family:'Playfair Display',serif;margin-bottom:1rem">↗️ Transferência Gratuita</h3>
+      <div id="transfer-msg"></div>
+      <div class="form-group">
+        <label>Livro a transferir</label>
+        <select id="transfer-token-select"><option value="">— carregando —</option></select>
+      </div>
+      <div class="tab-toggle">
+        <button class="active" id="tab-uname" onclick="switchTab('username')">Por Username</button>
+        <button id="tab-wallet" onclick="switchTab('wallet')">Por Chave Pública (Wallet)</button>
+      </div>
+      <div id="by-username">
+        <div class="form-group"><label>Username do destinatário</label><input type="text" id="transfer-username" placeholder="username_do_usuario"/></div>
+      </div>
+      <div id="by-wallet" style="display:none">
+        <div class="form-group"><label>Endereço Ethereum do destinatário</label><input type="text" id="transfer-wallet" class="wallet-input" placeholder="0x..."/></div>
+      </div>
+      <button class="btn btn-primary" onclick="doTransfer(this)">Transferir Gratuitamente</button>
+    </div>
+
+    <div class="card">
+      <h3 style="font-family:'Playfair Display',serif;margin-bottom:1rem">💰 Listar para Revenda</h3>
+      <p style="font-size:.83em;color:var(--muted);margin-bottom:1rem">Liste no marketplace público. Qualquer usuário pode comprar.</p>
+      <div id="resale-msg"></div>
+      <div class="form-group">
+        <label>Livro a listar</label>
+        <select id="resale-token-select"><option value="">— selecione —</option></select>
+      </div>
+      <div class="form-group"><label>Preço de revenda (ETH)</label><input type="number" id="resale-price" placeholder="0.05" step="0.001" min="0.001"/></div>
+      <div style="display:flex;gap:.8rem">
+        <button class="btn btn-gold" onclick="doListResale(this)">Listar para Venda</button>
+        <button class="btn btn-danger btn-sm" onclick="doCancelResale(this)">Cancelar Listagem</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── ADMIN ──────────────────────────────────────────────────────────────── -->
+<div id="page-admin" class="page">
+  <div style="max-width:620px">
+    <h2 class="section-title" style="margin-bottom:1.5rem">🔧 Painel Admin</h2>
+    <div class="info-box">
+      <strong>Adicionar Livro com PDF.</strong> O PDF será <strong>cifrado com AES-256-CBC</strong> no servidor imediatamente após o upload. 
+      Somente o arquivo cifrado (<code>.dlmpdf</code>) é salvo em disco. A chave AES fica em <code>storage/keys/</code> e nunca é exposta.
+    </div>
+    <div class="card">
+      <h3 style="font-family:'Playfair Display',serif;margin-bottom:1rem">📤 Adicionar Novo Livro</h3>
+      <div id="admin-msg"></div>
+      <div class="form-group"><label>Título</label><input type="text" id="admin-title" placeholder="Ex: Dom Casmurro"/></div>
+      <div class="form-group"><label>Autor</label><input type="text" id="admin-author" placeholder="Ex: Machado de Assis"/></div>
+      <div class="form-group"><label>ISBN</label><input type="text" id="admin-isbn" placeholder="978-..."/></div>
+      <div class="form-group"><label>Preço (ETH)</label><input type="number" id="admin-price" placeholder="0.01" step="0.001" min="0.001"/></div>
+      <div class="form-group">
+        <label>Arquivo PDF</label>
+        <input type="file" id="admin-pdf" accept="application/pdf"/>
+        <small style="color:var(--muted);font-size:.72em;margin-top:4px;display:block">O PDF será cifrado com AES-256 antes de ser salvo. Máximo 50MB.</small>
+      </div>
+      <button class="btn btn-primary" onclick="doAddBook(this)">Cifrar PDF &amp; Registrar na Blockchain</button>
+    </div>
+  </div>
+</div>
+
+</main>
+
+<!-- ── PDF Viewer ─────────────────────────────────────────────────────────── -->
+<div class="pdf-viewer" id="pdf-viewer">
+  <div class="pdf-toolbar">
+    <div>
+      <div class="pdf-toolbar-title" id="pdf-viewer-title">Carregando...</div>
+      <div style="font-size:.68em;opacity:.5;margin-top:2px;font-family:'DM Mono',monospace" id="pdf-viewer-sub"></div>
+    </div>
+    <div style="display:flex;align-items:center;gap:1rem">
+      <span class="drm-badge">🔐 AES-256 DRM</span>
+      <button class="btn btn-outline btn-sm" style="color:#fff;border-color:rgba(255,255,255,.3)" onclick="closePdfViewer()">✕ Fechar</button>
+    </div>
+  </div>
+  <iframe class="pdf-frame" id="pdf-frame" title="Leitor DLM"></iframe>
+</div>
+
+<script>
+const API = "http://localhost:3001/api";
+const API_KEY = "sua-chave-secreta-api-aqui";
+
+let token = localStorage.getItem("dlm_token");
+let me    = JSON.parse(localStorage.getItem("dlm_user") || "null");
+let transferMode = "username";
+
+document.addEventListener("DOMContentLoaded", () => { if (token && me) enterApp(); });
+
+function enterApp() {
+  document.getElementById("page-auth").classList.remove("active");
+  document.getElementById("main-nav").style.display = "flex";
+  document.getElementById("user-badge").style.display = "inline";
+  document.getElementById("user-badge").textContent = `👤 ${me.username}`;
+  document.getElementById("wallet-badge").style.display = "inline";
+  document.getElementById("wallet-badge").textContent = me.wallet.slice(0,6)+"…"+me.wallet.slice(-4);
+  document.getElementById("logout-btn").style.display = "inline";
+  showPage("catalog");
+  loadCatalog();
+}
+
+function logout() {
+  token = null; me = null;
+  localStorage.removeItem("dlm_token"); localStorage.removeItem("dlm_user");
+  location.reload();
+}
+
+function showPage(name, btn) {
+  document.querySelectorAll(".page").forEach(p => p.classList.remove("active"));
+  document.querySelectorAll("nav button").forEach(b => b.classList.remove("active"));
+  document.getElementById("page-"+name).classList.add("active");
+  if (btn) btn.classList.add("active");
+  if (name === "mybooks") loadMyBooks();
+  if (name === "marketplace") loadMarketplace();
+  if (name === "transfer") { loadSelectBooks("transfer-token-select"); loadSelectBooks("resale-token-select"); }
+}
+
+function msg(id, text, type="info") {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.innerHTML = text ? `<div class="alert alert-${type}">${text}</div>` : "";
+}
+
+function loading(btn, on) {
+  btn.disabled = on;
+  btn._t = btn._t || btn.innerHTML;
+  btn.innerHTML = on ? `<span class="spinner"></span>Aguarde...` : btn._t;
+}
+
+async function api(endpoint, opts={}) {
+  const headers = { "Content-Type":"application/json", "x-api-key": API_KEY, ...opts.headers };
+  if (token) headers["Authorization"] = "Bearer "+token;
+  const r = await fetch(API+endpoint, {...opts, headers});
+  return r.json();
+}
+
+// ── Auth ──────────────────────────────────────────────────────────────────
+async function doLogin(btn) {
+  const u = document.getElementById("login-username").value.trim();
+  const p = document.getElementById("login-password").value;
+  if (!u || !p) return msg("login-msg","Preencha todos os campos.","error");
+  loading(btn, true);
+  try {
+    const d = await api("/login", {method:"POST", body:JSON.stringify({username:u, password:p})});
+    if (d.success) {
+      token = d.token; me = {username:d.username, wallet:d.wallet};
+      localStorage.setItem("dlm_token", token); localStorage.setItem("dlm_user", JSON.stringify(me));
+      enterApp();
+    } else { msg("login-msg", d.message, "error"); }
+  } catch { msg("login-msg","Erro de conexão com a API.","error"); }
+  loading(btn, false);
+}
+
+async function doRegister(btn) {
+  const u = document.getElementById("reg-username").value.trim();
+  const e = document.getElementById("reg-email").value.trim();
+  const p = document.getElementById("reg-password").value;
+  const w = document.getElementById("reg-wallet").value.trim();
+  if (!u||!p||!w) return msg("register-msg","Preencha todos os campos obrigatórios.","error");
+  if (p.length<6) return msg("register-msg","Senha mínimo 6 caracteres.","error");
+  if (!w.startsWith("0x")||w.length!==42) return msg("register-msg","Endereço Ethereum inválido (0x + 40 hex).","error");
+  loading(btn, true);
+  msg("register-msg","⏳ Registrando na blockchain...","info");
+  try {
+    const d = await api("/register",{method:"POST",body:JSON.stringify({username:u,email:e,password:p,walletAddress:w})});
+    if (d.success) msg("register-msg",`✅ Conta criada! Tx: <span class="tx-hash">${d.txHash}</span> — Faça login.`,"success");
+    else msg("register-msg",d.message,"error");
+  } catch { msg("register-msg","Erro de conexão.","error"); }
+  loading(btn, false);
+}
+
+// ── Catalog ────────────────────────────────────────────────────────────────
+async function loadCatalog() {
+  const g = document.getElementById("catalog-grid");
+  g.innerHTML = `<div class="empty-state"><div class="empty-icon">⏳</div>Carregando...</div>`;
+  try {
+    const d = await api("/catalog");
+    if (!d.success||!d.catalog.length) {
+      g.innerHTML = `<div class="empty-state"><div class="empty-icon">📚</div>Nenhum livro no catálogo.</div>`; return;
+    }
+    g.innerHTML = d.catalog.map(b => `
+      <div class="book-card">
+        <div class="book-cover" style="background:hsl(${b.bookId*51+190},38%,17%)">
+          <div class="book-cover-inner">
+            <div class="cover-title">${b.title}</div>
+            <div class="cover-author">${b.author}</div>
+          </div>
+          <div class="book-cover-accent"></div>
+        </div>
+        <div class="book-info">
+          <div class="book-id">ISBN: ${b.isbn||"—"} · #${b.bookId}</div>
+          <div class="book-price">Ξ ${b.price} ETH ${b.hasFile?'<span class="tag tag-drm">🔐 PDF</span>':''}</div>
+          <div class="book-actions">
+            <button class="btn btn-primary btn-sm" onclick="buyBook(${b.bookId},'${b.title.replace(/'/g,"\\'")}','${b.priceWei}')">Comprar</button>
+          </div>
+        </div>
+      </div>`).join("");
+  } catch { msg("catalog-msg","Erro ao carregar catálogo.","error"); }
+}
+
+async function buyBook(bookId, title, priceWei) {
+  if (!confirm(`Comprar "${title}"?\nUm NFT será emitido para você na blockchain.`)) return;
+  msg("catalog-msg",`⏳ Processando compra de "${title}"...`,"info");
+  try {
+    const d = await api("/books/purchase",{method:"POST",body:JSON.stringify({bookId})});
+    if (d.success) msg("catalog-msg",`✅ "${title}" comprado! Tx: <span class="tx-hash">${d.txHash}</span>`,"success");
+    else msg("catalog-msg",d.message,"error");
+  } catch { msg("catalog-msg","Erro na compra.","error"); }
+}
+
+// ── My Books ───────────────────────────────────────────────────────────────
+async function loadMyBooks() {
+  const l = document.getElementById("mybooks-list");
+  l.innerHTML = `<div class="empty-state"><div class="empty-icon">⏳</div>Carregando...</div>`;
+  try {
+    const d = await api("/mybooks");
+    if (!d.success||!d.books.length) {
+      l.innerHTML = `<div class="empty-state"><div class="empty-icon">📖</div>Nenhum livro na sua biblioteca.</div>`; return;
+    }
+    l.innerHTML = d.books.map(b => `
+      <div class="my-book-item">
+        <div>
+          <div class="my-book-title">${b.title}
+            ${b.isForSale?`<span class="tag tag-sale">À venda Ξ${b.resalePrice}</span>`:`<span class="tag tag-owned">Em posse</span>`}
+            ${b.canRead?`<span class="tag tag-drm">🔐 PDF</span>`:''}
+          </div>
+          <div class="my-book-meta">Autor: ${b.author} · Token #${b.tokenId} · Livro #${b.bookId}</div>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
+          ${b.canRead?`<button class="btn btn-chain btn-sm" onclick="readBook(${b.tokenId},'${b.title.replace(/'/g,"\\'")}')">📖 Ler</button>`:''}
+          <button class="btn btn-outline btn-sm" onclick="viewHistory(${b.tokenId})">📜 Histórico</button>
+          ${b.isForSale
+            ?`<button class="btn btn-danger btn-sm" onclick="cancelResale(${b.tokenId})">Cancelar venda</button>`
+            :`<button class="btn btn-gold btn-sm" onclick="goTransfer(${b.tokenId})">Transferir/Vender</button>`}
+        </div>
+      </div>`).join("");
+  } catch { msg("mybooks-msg","Erro ao carregar biblioteca.","error"); }
+}
+
+// ── PDF DRM Reader ─────────────────────────────────────────────────────────
+async function readBook(tokenId, title) {
+  msg("mybooks-msg",`⏳ Verificando titularidade na blockchain para "${title}"...`,"info");
+  document.getElementById("pdf-viewer-title").textContent = title;
+  document.getElementById("pdf-viewer-sub").textContent = `Token #${tokenId} · Wallet: ${me.wallet.slice(0,10)}...`;
+  try {
+    const resp = await fetch(API+"/books/read", {
+      method: "POST",
+      headers: { "Content-Type":"application/json", "Authorization":"Bearer "+token, "x-api-key": API_KEY },
+      body: JSON.stringify({ tokenId })
+    });
+    if (!resp.ok) {
+      const err = await resp.json();
+      return msg("mybooks-msg", err.message || "Acesso negado.", "error");
+    }
+    const blob = await resp.blob();
+    const url  = URL.createObjectURL(blob);
+    document.getElementById("pdf-frame").src = url;
+    document.getElementById("pdf-viewer").classList.add("open");
+    msg("mybooks-msg","","");
+  } catch { msg("mybooks-msg","Erro ao abrir o livro.","error"); }
+}
+
+function closePdfViewer() {
+  document.getElementById("pdf-viewer").classList.remove("open");
+  const frame = document.getElementById("pdf-frame");
+  if (frame.src) URL.revokeObjectURL(frame.src);
+  frame.src = "";
+}
+
+async function viewHistory(tokenId) {
+  try {
+    const d = await api(`/books/history/${tokenId}`);
+    if (d.success) {
+      const hist = d.history.map((h,i)=>`<div style="font-family:'DM Mono',monospace;font-size:.7em;margin:3px 0;color:var(--chain)">${i===0?"🏪 Livraria":`👤 #${i}`}: ${h}</div>`).join("");
+      msg("mybooks-msg",`<strong>📜 Histórico Token #${tokenId} — "${d.bookTitle}":</strong><div style="margin-top:.5rem">${hist}</div>`,"info");
+    }
+  } catch { msg("mybooks-msg","Erro.","error"); }
+}
+
+async function cancelResale(tokenId) {
+  if (!confirm("Cancelar listagem de venda?")) return;
+  try {
+    const d = await api("/books/cancel-resale",{method:"POST",body:JSON.stringify({tokenId})});
+    msg("mybooks-msg", d.success?"✅ Listagem cancelada.":d.message, d.success?"success":"error");
+    if (d.success) loadMyBooks();
+  } catch { msg("mybooks-msg","Erro.","error"); }
+}
+
+function goTransfer(tokenId) {
+  showPage("transfer");
+  document.querySelectorAll("nav button")[3].classList.add("active");
+  setTimeout(()=>{ const s=document.getElementById("transfer-token-select"); for(let o of s.options) if(o.value==tokenId){s.value=tokenId;break;} },400);
+}
+
+// ── Marketplace ────────────────────────────────────────────────────────────
+async function loadMarketplace() {
+  const l = document.getElementById("marketplace-list");
+  l.innerHTML = `<div class="empty-state"><div class="empty-icon">⏳</div>Carregando...</div>`;
+  try {
+    const d = await api("/marketplace");
+    if (!d.success||!d.listings.length) {
+      l.innerHTML = `<div class="empty-state"><div class="empty-icon">🔄</div>Nenhum livro à venda no marketplace.</div>`; return;
+    }
+    l.innerHTML = d.listings.map(l=>`
+      <div class="listing-item">
+        <div>
+          <div style="font-family:'Playfair Display',serif;font-size:1.05rem">${l.title}</div>
+          <div style="font-size:.76em;color:var(--muted)">
+            ${l.author} · Token #${l.tokenId} · ${l.previousOwners} dono(s) anterior(es)
+          </div>
+          <div style="font-size:.68em;font-family:'DM Mono',monospace;color:var(--muted);margin-top:3px">
+            Vendedor: ${l.seller.slice(0,8)}…${l.seller.slice(-6)}
+          </div>
+        </div>
+        <div style="text-align:right">
+          <div class="listing-price">Ξ ${l.resalePrice} ETH</div>
+          <button class="btn btn-success btn-sm" style="margin-top:8px"
+            onclick="buyResale(${l.tokenId},'${l.title.replace(/'/g,"\\'")}','${l.resalePrice}')">Comprar</button>
+        </div>
+      </div>`).join("");
+  } catch { msg("marketplace-msg","Erro ao carregar marketplace.","error"); }
+}
+
+async function buyResale(tokenId, title, price) {
+  if (!confirm(`Comprar "${title}" por Ξ ${price} ETH?\n10% taxa DLM · 90% ao vendedor.`)) return;
+  msg("marketplace-msg",`⏳ Comprando "${title}"...`,"info");
+  try {
+    const d = await api("/books/buy-resale",{method:"POST",body:JSON.stringify({tokenId})});
+    if (d.success) { msg("marketplace-msg",`✅ Comprado! Tx: <span class="tx-hash">${d.txHash}</span>`,"success"); loadMarketplace(); }
+    else msg("marketplace-msg",d.message,"error");
+  } catch { msg("marketplace-msg","Erro.","error"); }
+}
+
+// ── Transfer ───────────────────────────────────────────────────────────────
+function switchTab(mode) {
+  transferMode = mode;
+  document.getElementById("by-username").style.display = mode==="username"?"block":"none";
+  document.getElementById("by-wallet").style.display   = mode==="wallet"?"block":"none";
+  document.getElementById("tab-uname").classList.toggle("active", mode==="username");
+  document.getElementById("tab-wallet").classList.toggle("active", mode==="wallet");
+}
+
+async function loadSelectBooks(selId) {
+  try {
+    const d = await api("/mybooks");
+    const sel = document.getElementById(selId);
+    if (!d.success||!d.books.length) { sel.innerHTML=`<option value="">Nenhum livro</option>`; return; }
+    sel.innerHTML = `<option value="">— selecione —</option>` + d.books.filter(b=>!b.isForSale).map(b=>`<option value="${b.tokenId}">Token #${b.tokenId} — ${b.title}</option>`).join("");
+  } catch {}
+}
+
+async function doTransfer(btn) {
+  const tokenId   = document.getElementById("transfer-token-select").value;
+  const toUsername= document.getElementById("transfer-username").value.trim();
+  const toWallet  = document.getElementById("transfer-wallet").value.trim();
+  if (!tokenId) return msg("transfer-msg","Selecione um livro.","error");
+  if (transferMode==="username"&&!toUsername) return msg("transfer-msg","Informe o username do destinatário.","error");
+  if (transferMode==="wallet"&&!toWallet) return msg("transfer-msg","Informe o endereço Ethereum.","error");
+  if (!confirm("Confirma a transferência? O destinatário terá acesso ao livro e você perderá o acesso.")) return;
+  loading(btn,true);
+  try {
+    const body = { tokenId: parseInt(tokenId) };
+    if (transferMode==="username") body.toUsername = toUsername;
+    else body.toWallet = toWallet;
+    const d = await api("/books/transfer",{method:"POST",body:JSON.stringify(body)});
+    if (d.success) {
+      msg("transfer-msg",`✅ Transferido! Novo dono: ${d.newOwner.slice(0,10)}... · Tx: <span class="tx-hash">${d.txHash}</span>`,"success");
+      loadSelectBooks("transfer-token-select"); loadSelectBooks("resale-token-select");
+    } else msg("transfer-msg",d.message,"error");
+  } catch { msg("transfer-msg","Erro.","error"); }
+  loading(btn,false);
+}
+
+async function doListResale(btn) {
+  const tokenId = document.getElementById("resale-token-select").value;
+  const price   = document.getElementById("resale-price").value;
+  if (!tokenId||!price) return msg("resale-msg","Selecione o livro e informe o preço.","error");
+  loading(btn,true);
+  try {
+    const d = await api("/books/list-resale",{method:"POST",body:JSON.stringify({tokenId:parseInt(tokenId),priceEth:parseFloat(price)})});
+    if (d.success) { msg("resale-msg",`✅ Listado por Ξ ${price} ETH. Tx: <span class="tx-hash">${d.txHash}</span>`,"success"); }
+    else msg("resale-msg",d.message,"error");
+  } catch { msg("resale-msg","Erro.","error"); }
+  loading(btn,false);
+}
+
+async function doCancelResale(btn) {
+  const tokenId = document.getElementById("resale-token-select").value;
+  if (!tokenId) return msg("resale-msg","Selecione o livro.","error");
+  loading(btn,true);
+  try {
+    const d = await api("/books/cancel-resale",{method:"POST",body:JSON.stringify({tokenId:parseInt(tokenId)})});
+    msg("resale-msg", d.success?"✅ Listagem cancelada.":d.message, d.success?"success":"error");
+  } catch { msg("resale-msg","Erro.","error"); }
+  loading(btn,false);
+}
+
+// ── Admin ──────────────────────────────────────────────────────────────────
+async function doAddBook(btn) {
+  const title  = document.getElementById("admin-title").value.trim();
+  const author = document.getElementById("admin-author").value.trim();
+  const isbn   = document.getElementById("admin-isbn").value.trim();
+  const price  = document.getElementById("admin-price").value;
+  const file   = document.getElementById("admin-pdf").files[0];
+  if (!title||!author||!price||!file) return msg("admin-msg","Preencha todos os campos e selecione um PDF.","error");
+  loading(btn,true);
+  msg("admin-msg","⏳ Cifrando PDF com AES-256 e registrando na blockchain...","info");
+  try {
+    const fd = new FormData();
+    fd.append("title",title); fd.append("author",author);
+    fd.append("isbn",isbn);   fd.append("priceEth",price);
+    fd.append("pdf",file);
+    const resp = await fetch(API+"/admin/books/add", {
+      method:"POST",
+      headers:{"x-api-key":API_KEY},
+      body: fd
+    });
+    const d = await resp.json();
+    if (d.success) {
+      msg("admin-msg",
+        `✅ Livro #${d.bookId} cadastrado! PDF cifrado com AES-256.<br/>
+         Hash original: <span class="tx-hash">${d.hashOriginal}</span><br/>
+         Hash cifrado: <span class="tx-hash">${d.hashEncrypted}</span><br/>
+         Tx: <span class="tx-hash">${d.txHash}</span>`,"success");
+    } else msg("admin-msg",d.message,"error");
+  } catch { msg("admin-msg","Erro ao enviar.","error"); }
+  loading(btn,false);
+}
+</script>
+</body>
+</html>

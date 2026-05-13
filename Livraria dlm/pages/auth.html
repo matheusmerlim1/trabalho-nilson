@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>LivrosDLM — Entrar / Cadastrar</title>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Inter:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../css/style.css"/>
+  <style>
+    body { display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:100vh; padding:2rem 1rem; }
+    .auth-card { width:100%; max-width:420px; }
+    .auth-brand { text-align:center; margin-bottom:1.75rem; }
+    .auth-brand .brand-icon { width:52px; height:52px; background:var(--accent); border-radius:14px; display:flex; align-items:center; justify-content:center; font-size:1.5rem; margin:0 auto 12px; }
+    .auth-brand h1 { font-family:var(--serif); font-size:1.5rem; font-weight:700; }
+    .auth-brand p { font-size:.82rem; color:var(--muted); margin-top:4px; }
+    .tabs { display:flex; border-bottom:1px solid var(--border); background:var(--surface); border-radius:var(--radius) var(--radius) 0 0; overflow:hidden; }
+    .tab { flex:1; padding:13px; font-size:.84rem; font-weight:500; text-align:center; cursor:pointer; color:var(--muted); border:none; background:transparent; border-bottom:2px solid transparent; transition:all .15s; }
+    .tab.active { color:var(--accent); border-bottom-color:var(--accent); }
+    .tab:hover:not(.active) { background:var(--surface2); }
+    .panel { padding:1.5rem; display:none; }
+    .panel.active { display:block; }
+    .step { display:flex; align-items:flex-start; gap:12px; padding:12px 13px; border:1px solid var(--border); border-radius:8px; margin-bottom:8px; background:var(--surface); transition:all .2s; }
+    .step.s-active { border-color:rgba(29,78,216,.45); background:rgba(29,78,216,.04); }
+    .step.s-done   { border-color:rgba(21,128,61,.4);  background:rgba(21,128,61,.05); }
+    .step.s-error  { border-color:rgba(185,28,28,.4);  background:rgba(185,28,28,.05); }
+    .step-num { width:26px; height:26px; border-radius:50%; background:var(--surface2); border:1px solid var(--border); display:flex; align-items:center; justify-content:center; font-family:var(--mono); font-size:.7rem; font-weight:600; color:var(--muted); flex-shrink:0; }
+    .step.s-active .step-num { background:rgba(29,78,216,.1); border-color:rgba(29,78,216,.4); color:var(--accent); }
+    .step.s-done   .step-num { background:rgba(21,128,61,.1); border-color:rgba(21,128,61,.4); color:var(--green); }
+    .step.s-error  .step-num { background:rgba(185,28,28,.1); border-color:rgba(185,28,28,.4); color:var(--red); }
+    .step-title { font-size:.82rem; font-weight:500; color:var(--ink); margin-bottom:2px; }
+    .step-desc  { font-size:.74rem; color:var(--muted); line-height:1.5; }
+    .step.s-active .step-desc { color:var(--accent); }
+    .step.s-done   .step-desc { color:var(--green); }
+    .step.s-error  .step-desc { color:var(--red); }
+    .wallet-box { background:var(--surface2); border:1px solid var(--border); border-radius:8px; padding:10px 12px; margin:12px 0; display:none; }
+    .wallet-box.show { display:block; }
+    .wallet-label { font-family:var(--mono); font-size:.58rem; letter-spacing:.12em; text-transform:uppercase; color:var(--muted); margin-bottom:4px; }
+    .wallet-addr  { font-family:var(--mono); font-size:.72rem; color:var(--ink); word-break:break-all; }
+    .token-box { background:rgba(21,128,61,.06); border:1px solid rgba(21,128,61,.3); border-radius:8px; padding:13px; margin:12px 0; display:none; }
+    .token-box.show { display:block; }
+    .token-header { font-family:var(--mono); font-size:.65rem; font-weight:600; color:var(--green); margin-bottom:8px; }
+    .token-val { font-family:var(--mono); font-size:.62rem; color:var(--ink); background:var(--surface); border:1px solid var(--border); border-radius:6px; padding:8px 10px; word-break:break-all; line-height:1.6; max-height:80px; overflow-y:auto; }
+    .token-actions { display:flex; gap:8px; margin-top:10px; }
+    .token-actions .btn { flex:1; font-size:.75rem; padding:.4rem .7rem; }
+    .info-box { background:var(--surface2); border:1px solid var(--border); border-radius:8px; padding:11px 13px; margin-top:12px; }
+    .info-row { display:flex; align-items:flex-start; gap:8px; margin-bottom:7px; font-size:.76rem; color:var(--muted); line-height:1.5; }
+    .info-row:last-child { margin-bottom:0; }
+    .demo-notice { background:rgba(180,83,9,.07); border:1px solid rgba(180,83,9,.25); border-radius:8px; padding:10px 12px; font-size:.74rem; color:var(--gold); margin-bottom:1rem; line-height:1.55; }
+  </style>
+</head>
+<body>
+
+<div class="auth-brand">
+  <div class="brand-icon">🔐</div>
+  <h1>LivrosDLM</h1>
+  <p>Autenticação por carteira Ethereum — sem senha</p>
+</div>
+
+<div class="auth-card">
+  <div class="demo-notice">
+    ⚡ <strong>Modo demonstração</strong> — o fluxo é simulado. Em produção, conecta ao servidor em <code>localhost:3000/api/v1</code> e ao MetaMask real.
+  </div>
+
+  <div class="card">
+    <div class="tabs">
+      <button class="tab active" onclick="switchTab('login')">🔓 Entrar</button>
+      <button class="tab" onclick="switchTab('register')">✨ Criar conta</button>
+    </div>
+
+    <!-- LOGIN -->
+    <div class="panel active" id="panel-login">
+      <div class="step" id="ls1"><div class="step-num" id="ls1n">1</div><div class="step-body" style="flex:1"><div class="step-title">Conectar carteira</div><div class="step-desc" id="ls1d">Conecte sua carteira MetaMask para identificação</div></div></div>
+      <div class="step" id="ls2"><div class="step-num" id="ls2n">2</div><div class="step-body" style="flex:1"><div class="step-title">Assinar desafio</div><div class="step-desc" id="ls2d">O servidor envia um nonce único para você assinar</div></div></div>
+      <div class="step" id="ls3"><div class="step-num" id="ls3n">3</div><div class="step-body" style="flex:1"><div class="step-title">Receber token JWT</div><div class="step-desc" id="ls3d">Autenticação verificada — token gerado</div></div></div>
+
+      <div class="wallet-box" id="l-wallet"><div class="wallet-label">Carteira conectada</div><div class="wallet-addr" id="l-addr">—</div></div>
+
+      <div class="token-box" id="l-token">
+        <div class="token-header">✅ TOKEN JWT GERADO</div>
+        <div class="token-val" id="l-token-val">—</div>
+        <div class="token-actions">
+          <button class="btn" id="l-copy" onclick="copyTok('l-token-val','l-copy')">📋 Copiar</button>
+          <button class="btn btn-primary" onclick="goHome()">Ir para a loja →</button>
+        </div>
+      </div>
+
+      <button class="btn btn-primary btn-full" id="btn-login" onclick="doLogin()" style="margin-top:12px">
+        🦊 Conectar e autenticar
+      </button>
+
+      <div class="info-box">
+        <div class="info-row">🛡️ Nenhuma senha — sua carteira é sua identidade</div>
+        <div class="info-row">🔑 A chave privada nunca sai do seu dispositivo</div>
+        <div class="info-row">⏱️ Token expira em 1 hora por segurança</div>
+      </div>
+    </div>
+
+    <!-- CADASTRO -->
+    <div class="panel" id="panel-register">
+      <div class="step" id="rs1"><div class="step-num" id="rs1n">1</div><div class="step-body" style="flex:1"><div class="step-title">Conectar carteira</div><div class="step-desc" id="rs1d">Conecte sua carteira Ethereum (MetaMask, WalletConnect...)</div></div></div>
+      <div class="step" id="rs2"><div class="step-num" id="rs2n">2</div><div class="step-body" style="flex:1"><div class="step-title">Verificar endereço</div><div class="step-desc" id="rs2d">O servidor verifica se o endereço já está registrado</div></div></div>
+      <div class="step" id="rs3"><div class="step-num" id="rs3n">3</div><div class="step-body" style="flex:1"><div class="step-title">Assinar e registrar</div><div class="step-desc" id="rs3d">Assine para confirmar a posse da carteira e criar a conta</div></div></div>
+      <div class="step" id="rs4"><div class="step-num" id="rs4n">4</div><div class="step-body" style="flex:1"><div class="step-title">Conta criada — token gerado</div><div class="step-desc" id="rs4d">Pronto para usar a plataforma</div></div></div>
+
+      <div class="wallet-box" id="r-wallet"><div class="wallet-label">Carteira detectada</div><div class="wallet-addr" id="r-addr">—</div></div>
+
+      <div class="token-box" id="r-token">
+        <div class="token-header">✅ CONTA CRIADA — TOKEN JWT GERADO</div>
+        <div class="token-val" id="r-token-val">—</div>
+        <div class="token-actions">
+          <button class="btn" id="r-copy" onclick="copyTok('r-token-val','r-copy')">📋 Copiar</button>
+          <button class="btn btn-primary" onclick="goHome()">Ir para a loja →</button>
+        </div>
+      </div>
+
+      <button class="btn btn-primary btn-full" id="btn-register" onclick="doRegister()" style="margin-top:12px">
+        🦊 Conectar e criar conta
+      </button>
+
+      <div class="info-box">
+        <div class="info-row">⬇️ Instale o MetaMask em <strong>metamask.io</strong></div>
+        <div class="info-row">📱 Disponível como app iOS e Android</div>
+        <div class="info-row">👤 Uma carteira = uma conta — sem email ou senha</div>
+      </div>
+    </div>
+  </div>
+
+  <div style="text-align:center;margin-top:1rem">
+    <a href="../index.html" class="btn btn-ghost btn-sm">← Voltar à loja</a>
+  </div>
+</div>
+
+<div id="toast-container"></div>
+<script src="../js/api.js"></script>
+<script src="../js/app.js"></script>
+<script>
+const { Auth, APIAuth } = window.DLM;
+
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('active',(i===0&&name==='login')||(i===1&&name==='register')));
+  document.getElementById('panel-login').classList.toggle('active', name==='login');
+  document.getElementById('panel-register').classList.toggle('active', name==='register');
+}
+
+function setStep(id, state, desc) {
+  const el=document.getElementById(id), num=document.getElementById(id+'n'), d=document.getElementById(id+'d');
+  el.className='step'+(state?' s-'+state:'');
+  if(desc)d.textContent=desc;
+  if(state==='done')num.textContent='✓';
+  if(state==='error')num.textContent='✗';
+}
+
+function fakeAddr(){ return '0x'+Array.from({length:40},()=>'0123456789abcdef'[Math.floor(Math.random()*16)]).join(''); }
+function fakeJWT(addr){
+  const h=btoa(JSON.stringify({alg:'HS256',typ:'JWT'})).replace(/=/g,'');
+  const p=btoa(JSON.stringify({address:addr,iss:'dlm-pdf-oracle',aud:'dlm-pdf-client',iat:Math.floor(Date.now()/1000),exp:Math.floor(Date.now()/1000)+3600})).replace(/=/g,'');
+  const s=btoa('sig-'+Math.random().toString(36).slice(2,18)).replace(/=/g,'').slice(0,43);
+  return `${h}.${p}.${s}`;
+}
+
+async function doLogin() {
+  const btn=document.getElementById('btn-login');
+  btn.disabled=true; btn.innerHTML='<span class="spin"></span> Conectando...';
+  setStep('ls1','s-active','Solicitando acesso à carteira...');
+  await delay(900);
+  const addr=fakeAddr();
+  setStep('ls1','s-done',addr.slice(0,10)+'...'+addr.slice(-6)+' conectado');
+  document.getElementById('l-wallet').classList.add('show');
+  document.getElementById('l-addr').textContent=addr;
+  setStep('ls2','s-active','Aguardando assinatura...');
+  btn.innerHTML='<span class="spin"></span> Aguardando assinatura...';
+  await delay(1200);
+  setStep('ls2','s-done','Assinatura verificada');
+  setStep('ls3','s-active','Gerando token JWT...');
+  btn.innerHTML='<span class="spin"></span> Gerando token...';
+  await delay(700);
+  const token=fakeJWT(addr);
+  setStep('ls3','s-done','Token válido por 1 hora');
+  document.getElementById('l-token').classList.add('show');
+  document.getElementById('l-token-val').textContent=token;
+  Auth.save(token, addr);
+  btn.className='btn btn-success btn-full'; btn.innerHTML='✅ Autenticado com sucesso';
+  toast('Login realizado com sucesso!','ok');
+}
+
+async function doRegister() {
+  const btn=document.getElementById('btn-register');
+  btn.disabled=true; btn.innerHTML='<span class="spin"></span> Conectando...';
+  setStep('rs1','s-active','Detectando carteira...');
+  await delay(800);
+  const addr=fakeAddr();
+  setStep('rs1','s-done',addr.slice(0,10)+'...'+addr.slice(-6)+' detectado');
+  document.getElementById('r-wallet').classList.add('show');
+  document.getElementById('r-addr').textContent=addr;
+  setStep('rs2','s-active','Verificando endereço...');
+  btn.innerHTML='<span class="spin"></span> Verificando...';
+  await delay(900);
+  setStep('rs2','s-done','Endereço disponível');
+  setStep('rs3','s-active','Aguardando assinatura...');
+  btn.innerHTML='<span class="spin"></span> Aguardando assinatura...';
+  await delay(1300);
+  setStep('rs3','s-done','Conta registrada');
+  setStep('rs4','s-active','Gerando token...');
+  btn.innerHTML='<span class="spin"></span> Finalizando...';
+  await delay(600);
+  const token=fakeJWT(addr);
+  setStep('rs4','s-done','Bem-vindo ao LivrosDLM!');
+  document.getElementById('r-token').classList.add('show');
+  document.getElementById('r-token-val').textContent=token;
+  Auth.save(token, addr);
+  btn.className='btn btn-success btn-full'; btn.innerHTML='✅ Conta criada com sucesso';
+  toast('Conta criada com sucesso!','ok');
+}
+
+async function copyTok(valId, btnId) {
+  const val=document.getElementById(valId).textContent;
+  const btn=document.getElementById(btnId);
+  await navigator.clipboard.writeText(val).catch(()=>{});
+  btn.textContent='✅ Copiado!';
+  setTimeout(()=>btn.innerHTML='📋 Copiar',2000);
+}
+
+function goHome(){ setTimeout(()=>window.location.href='../index.html', 500); }
+
+if(Auth.isLoggedIn()) {
+  document.querySelectorAll('.demo-notice').forEach(el=>el.innerHTML='✅ Você já está autenticado. <a href="../index.html">Voltar à loja →</a>');
+}
+</script>
+</body>
+</html>

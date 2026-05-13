@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>LivrosDLM — Painel da Editora</title>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Inter:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../css/style.css"/>
+  <style>
+    .pub-layout { display:grid; grid-template-columns:1fr 1fr; gap:2rem; padding:2rem; max-width:1100px; margin:0 auto; }
+    .pub-section { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:1.5rem; }
+    .pub-section h2 { font-family:var(--serif); font-size:1.15rem; font-weight:700; margin-bottom:1.1rem; padding-bottom:.75rem; border-bottom:1px solid var(--border); }
+    .dropzone { border:2px dashed var(--border); border-radius:8px; padding:2rem 1rem; text-align:center; cursor:pointer; transition:all .2s; background:var(--surface2); }
+    .dropzone:hover,.dropzone.over { border-color:var(--accent); background:rgba(29,78,216,.04); }
+    .dropzone input { display:none; }
+    .dz-icon { font-size:2rem; margin-bottom:.5rem; }
+    .dz-title { font-size:.88rem; font-weight:500; margin-bottom:.2rem; }
+    .dz-sub   { font-size:.74rem; color:var(--muted); }
+    .file-chip { display:none; align-items:center; gap:.5rem; background:rgba(29,78,216,.08); border:1px solid rgba(29,78,216,.25); border-radius:6px; padding:.45rem .75rem; font-size:.75rem; color:var(--accent); font-family:var(--mono); word-break:break-all; margin-top:.75rem; }
+    .file-chip.show { display:flex; }
+    .progress-bar { width:100%; height:4px; background:var(--border); border-radius:99px; overflow:hidden; margin:.75rem 0; }
+    .progress-fill { height:100%; background:var(--accent); border-radius:99px; width:0%; transition:width .4s ease; }
+    .result-box { display:none; background:rgba(21,128,61,.06); border:1px solid rgba(21,128,61,.3); border-radius:8px; padding:1rem; margin-top:.75rem; }
+    .result-box.show { display:block; }
+    .result-box h4 { font-family:var(--mono); font-size:.68rem; color:var(--green); margin-bottom:.6rem; }
+    .hash-val { font-family:var(--mono); font-size:.62rem; color:var(--muted); background:var(--surface2); border-radius:4px; padding:.5rem .65rem; word-break:break-all; line-height:1.6; margin-bottom:.5rem; }
+    .books-list { display:flex; flex-direction:column; gap:.75rem; max-height:420px; overflow-y:auto; }
+    .book-row { display:flex; align-items:center; gap:.75rem; padding:.75rem; background:var(--surface2); border-radius:8px; border:1px solid var(--border); }
+    .book-row-emoji { font-size:1.5rem; flex-shrink:0; }
+    .book-row-info { flex:1; min-width:0; }
+    .book-row-title { font-size:.88rem; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .book-row-meta  { font-size:.72rem; color:var(--muted); }
+    .book-row-actions { display:flex; gap:.4rem; }
+    @media(max-width:768px){ .pub-layout{grid-template-columns:1fr} }
+  </style>
+</head>
+<body>
+
+<nav class="navbar">
+  <a href="../index.html" class="nav-brand">📚 Livros<span>DLM</span></a>
+  <ul class="nav-links">
+    <li><a href="../index.html">Início</a></li>
+    <li><a href="catalog.html">Catálogo</a></li>
+    <li><a href="biblioteca.html">Minha Biblioteca</a></li>
+    <li><a href="publisher.html" class="active">Editora</a></li>
+  </ul>
+  <div class="nav-right">
+    <span class="nav-wallet" id="nav-wallet"></span>
+    <a href="auth.html" class="btn btn-primary btn-sm" id="nav-login-btn">🦊 Entrar</a>
+    <button class="btn btn-ghost btn-sm" id="nav-logout-btn" style="display:none">Sair</button>
+  </div>
+</nav>
+
+<div class="page-header">
+  <h1>Painel da Editora</h1>
+  <p>Publique livros, encripte PDFs no formato .dlm e gerencie licenças</p>
+</div>
+
+<div id="not-logged" style="display:none">
+  <div class="empty-state">
+    <div class="empty-icon">🔐</div>
+    <h3>Acesso restrito</h3>
+    <p>Faça login com sua carteira para acessar o painel da editora.</p>
+    <br>
+    <a href="auth.html" class="btn btn-primary">🦊 Entrar</a>
+  </div>
+</div>
+
+<div id="pub-content" style="display:none">
+<div class="pub-layout">
+
+  <!-- Cadastrar livro -->
+  <div class="pub-section">
+    <h2>📝 Cadastrar novo livro</h2>
+    <div class="field"><label>Título *</label><input type="text" id="p-title" placeholder="Ex: O Senhor dos Anéis"/></div>
+    <div class="field"><label>Autor *</label><input type="text" id="p-author" placeholder="Ex: J.R.R. Tolkien"/></div>
+    <div class="field"><label>Descrição</label><textarea id="p-desc" placeholder="Sinopse do livro..."></textarea></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem">
+      <div class="field"><label>Preço (R$) *</label><input type="number" id="p-price" placeholder="29.90" min="0" step="0.01"/></div>
+      <div class="field"><label>Royalty (%)</label><input type="number" id="p-royalty" value="5" min="1" max="30"/></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem">
+      <div class="field"><label>Gênero</label>
+        <select id="p-genre">
+          <option>Ficção Científica</option><option>Fantasia</option><option>Distopia</option>
+          <option>Literatura Brasileira</option><option>Clássico</option><option>Sátira</option>
+          <option>Romance</option><option>Terror</option><option>Outro</option>
+        </select>
+      </div>
+      <div class="field"><label>Emoji da capa</label><input type="text" id="p-emoji" placeholder="📚" maxlength="2"/></div>
+    </div>
+
+    <div style="margin-bottom:.75rem">
+      <label style="font-size:.78rem;font-weight:500;color:var(--muted);display:block;margin-bottom:.35rem">PDF do livro *</label>
+      <div class="dropzone" id="pdf-drop">
+        <input type="file" id="pdf-file" accept=".pdf"/>
+        <div class="dz-icon">📄</div>
+        <div class="dz-title">Arraste o PDF aqui</div>
+        <div class="dz-sub">ou clique para selecionar</div>
+      </div>
+      <div class="file-chip" id="pdf-chip">📄 <span id="pdf-name"></span></div>
+    </div>
+
+    <div class="progress-bar"><div class="progress-fill" id="pub-progress"></div></div>
+
+    <button class="btn btn-primary btn-full" id="btn-publish" onclick="publishBook()" disabled>
+      🚀 Publicar livro
+    </button>
+
+    <div class="result-box" id="pub-result">
+      <h4>✅ LIVRO PUBLICADO — LICENÇA GERADA</h4>
+      <div class="hash-val" id="pub-hash"></div>
+      <button class="btn btn-sm" id="btn-dl-dlm">⬇ Baixar arquivo .dlm</button>
+    </div>
+  </div>
+
+  <!-- Livros publicados -->
+  <div class="pub-section">
+    <h2>📚 Meus livros publicados</h2>
+    <div class="books-list" id="pub-books-list"></div>
+  </div>
+
+</div>
+</div>
+
+<div id="toast-container"></div>
+<script src="../js/api.js"></script>
+<script src="../js/app.js"></script>
+<script>
+const { Auth, APIBooks, APIPublisher } = window.DLM;
+
+let pdfBuffer = null;
+let dlmBuffer = null;
+
+document.addEventListener('DOMContentLoaded', () => {
+  if (!Auth.isLoggedIn()) {
+    document.getElementById('not-logged').style.display = 'block';
+    return;
+  }
+  document.getElementById('pub-content').style.display = 'block';
+  renderMyBooks();
+  setupDrop();
+});
+
+function setupDrop() {
+  const zone  = document.getElementById('pdf-drop');
+  const input = document.getElementById('pdf-file');
+
+  zone.addEventListener('click', () => input.click());
+  input.addEventListener('change', e => { if(e.target.files[0]) loadPDF(e.target.files[0]); });
+  zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('over'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('over'));
+  zone.addEventListener('drop', e => {
+    e.preventDefault(); zone.classList.remove('over');
+    const f = e.dataTransfer.files[0];
+    if (f && f.name.endsWith('.pdf')) loadPDF(f);
+    else toast('Selecione um arquivo .pdf', 'err');
+  });
+}
+
+async function loadPDF(file) {
+  pdfBuffer = await file.arrayBuffer();
+  document.getElementById('pdf-name').textContent = file.name;
+  document.getElementById('pdf-chip').classList.add('show');
+  checkPublishReady();
+  toast(`PDF carregado: ${file.name}`, 'ok');
+}
+
+function checkPublishReady() {
+  const title  = document.getElementById('p-title').value.trim();
+  const author = document.getElementById('p-author').value.trim();
+  const price  = document.getElementById('p-price').value;
+  document.getElementById('btn-publish').disabled = !(title && author && price && pdfBuffer);
+}
+
+['p-title','p-author','p-price'].forEach(id => {
+  document.getElementById(id)?.addEventListener('input', checkPublishReady);
+});
+
+async function publishBook() {
+  const title   = document.getElementById('p-title').value.trim();
+  const author  = document.getElementById('p-author').value.trim();
+  const desc    = document.getElementById('p-desc').value.trim();
+  const price   = parseFloat(document.getElementById('p-price').value);
+  const royalty = parseInt(document.getElementById('p-royalty').value) || 5;
+  const genre   = document.getElementById('p-genre').value;
+  const emoji   = document.getElementById('p-emoji').value || '📚';
+
+  const btn = document.getElementById('btn-publish');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spin"></span> Registrando na blockchain...';
+
+  const prog = document.getElementById('pub-progress');
+
+  try {
+    prog.style.width = '20%';
+    await delay(500);
+
+    // SHA-256 do PDF
+    const hashBuffer = await crypto.subtle.digest('SHA-256', pdfBuffer);
+    const hashHex    = '0x' + Array.from(new Uint8Array(hashBuffer)).map(b=>b.toString(16).padStart(2,'0')).join('');
+
+    prog.style.width = '45%';
+    btn.innerHTML = '<span class="spin"></span> Encriptando PDF...';
+    await delay(400);
+
+    // Encripta via API
+    const pdfBase64  = btoa(String.fromCharCode(...new Uint8Array(pdfBuffer)));
+    const licenseId  = Date.now();
+    const encResult  = await APIPublisher.encryptPDF(pdfBase64, licenseId);
+    dlmBuffer        = Uint8Array.from(atob(encResult.dlmBase64||btoa('demo')), c=>c.charCodeAt(0)).buffer;
+
+    prog.style.width = '75%';
+    btn.innerHTML = '<span class="spin"></span> Publicando livro...';
+    await delay(600);
+
+    // Registra o livro localmente (demo) + na blockchain
+    const book = APIBooks.add({ title, author, description:desc, price, genre, emoji, royaltyBps: royalty*100, color: null });
+    await APIPublisher.registerBook(title, author, hashHex, royalty*100);
+
+    prog.style.width = '100%';
+
+    const result = document.getElementById('pub-result');
+    result.classList.add('show');
+    document.getElementById('pub-hash').innerHTML =
+      `License ID: ${licenseId}<br>SHA-256: ${hashHex.slice(0,34)}...<br>Royalty: ${royalty}%`;
+
+    document.getElementById('btn-dl-dlm').onclick = () => {
+      const blob = new Blob([dlmBuffer], {type:'application/octet-stream'});
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.href = url; a.download = `${title.replace(/\s+/g,'-').toLowerCase()}-license${licenseId}.dlm`; a.click();
+      URL.revokeObjectURL(url);
+    };
+
+    toast(`"${title}" publicado com sucesso!`, 'ok');
+    renderMyBooks();
+
+    btn.innerHTML = '✅ Publicado com sucesso';
+    btn.className = 'btn btn-success btn-full';
+
+  } catch(err) {
+    toast('Erro: ' + err.message, 'err');
+    btn.disabled = false;
+    btn.innerHTML = '🚀 Publicar livro';
+    prog.style.width = '0%';
+  }
+}
+
+function renderMyBooks() {
+  const list  = document.getElementById('pub-books-list');
+  const books = APIBooks.getAll();
+
+  if (books.length === 0) {
+    list.innerHTML = '<div class="empty-state" style="padding:2rem"><div class="empty-icon" style="font-size:2rem">📭</div><p>Nenhum livro publicado ainda.</p></div>';
+    return;
+  }
+
+  list.innerHTML = books.map(b => `
+    <div class="book-row">
+      <div class="book-row-emoji">${b.emoji||'📚'}</div>
+      <div class="book-row-info">
+        <div class="book-row-title">${b.title}</div>
+        <div class="book-row-meta">${b.author} · ${formatPrice(b.price)} · ${b.genre||''}</div>
+      </div>
+      <div class="book-row-actions">
+        <a href="livro.html?id=${b.id}" class="btn btn-sm">Ver</a>
+      </div>
+    </div>`).join('');
+}
+</script>
+</body>
+</html>

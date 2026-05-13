@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>LivrosDLM — Livro</title>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Inter:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../css/style.css"/>
+  <style>
+    .book-detail { display:grid; grid-template-columns:280px 1fr; gap:3rem; padding:3rem 2rem; max-width:1000px; margin:0 auto; }
+    .cover-col .cover-box { background:var(--surface2); border-radius:var(--radius); overflow:hidden; aspect-ratio:2/3; display:flex; align-items:center; justify-content:center; font-size:5rem; box-shadow:var(--shadow-md); }
+    .cover-col .cover-inner { display:flex; flex-direction:column; align-items:center; gap:.5rem; width:100%; height:100%; padding:1.5rem; }
+    .cover-col .c-title { font-family:var(--serif); font-size:.85rem; color:rgba(255,255,255,.8); text-align:center; }
+    .book-meta h1 { font-family:var(--serif); font-size:2rem; font-weight:700; line-height:1.2; margin-bottom:.5rem; }
+    .book-meta .author { font-size:1rem; color:var(--muted); margin-bottom:1rem; }
+    .book-meta .desc { font-size:.9rem; line-height:1.7; color:var(--ink); margin-bottom:1.5rem; }
+    .meta-tags { display:flex; flex-wrap:wrap; gap:.5rem; margin-bottom:1.5rem; }
+    .purchase-box { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:1.25rem; }
+    .price-big { font-family:var(--mono); font-size:1.8rem; font-weight:600; color:var(--accent); margin-bottom:1rem; }
+    .purchase-info { font-size:.78rem; color:var(--muted); margin-top:.75rem; line-height:1.6; }
+    .license-active { background:rgba(21,128,61,.07); border:1px solid rgba(21,128,61,.3); border-radius:8px; padding:1rem; display:none; }
+    .license-active.show { display:block; }
+    .tx-box { background:var(--surface2); border-radius:6px; padding:.6rem .8rem; font-family:var(--mono); font-size:.62rem; color:var(--muted); word-break:break-all; margin-top:.5rem; }
+    @media(max-width:700px){ .book-detail{grid-template-columns:1fr;gap:1.5rem} }
+  </style>
+</head>
+<body>
+
+<nav class="navbar">
+  <a href="../index.html" class="nav-brand">📚 Livros<span>DLM</span></a>
+  <ul class="nav-links">
+    <li><a href="../index.html">Início</a></li>
+    <li><a href="catalog.html">Catálogo</a></li>
+    <li><a href="biblioteca.html">Minha Biblioteca</a></li>
+    <li><a href="publisher.html">Editora</a></li>
+  </ul>
+  <div class="nav-right">
+    <span class="nav-wallet" id="nav-wallet"></span>
+    <a href="auth.html" class="btn btn-primary btn-sm" id="nav-login-btn">🦊 Entrar</a>
+    <button class="btn btn-ghost btn-sm" id="nav-logout-btn" style="display:none">Sair</button>
+  </div>
+</nav>
+
+<div id="book-detail-wrap"></div>
+
+<div id="toast-container"></div>
+<script src="../js/api.js"></script>
+<script src="../js/app.js"></script>
+<script>
+const { Auth, APIBooks, APILicenses, APIPublisher } = window.DLM;
+
+const params = new URLSearchParams(window.location.search);
+const bookId = params.get('id');
+const book   = APIBooks.getById(bookId);
+
+if (!book) {
+  document.getElementById('book-detail-wrap').innerHTML = `
+    <div class="empty-state">
+      <div class="empty-icon">📭</div>
+      <h3>Livro não encontrado</h3>
+      <p><a href="catalog.html">Voltar ao catálogo</a></p>
+    </div>`;
+} else {
+  document.title = `${book.title} — LivrosDLM`;
+  const colors = ['#1e3a5f','#78350f','#3b0764','#1c1917','#7c3aed','#15803d'];
+  const color  = book.color || colors[book.id % colors.length];
+  const alreadyOwns = Auth.isLoggedIn() && APILicenses.hasLicense(book.id);
+
+  document.getElementById('book-detail-wrap').innerHTML = `
+    <div class="book-detail">
+      <div class="cover-col">
+        <div class="cover-box" style="background:${color}">
+          <div class="cover-inner">
+            <div style="font-size:4.5rem">${book.emoji||'📚'}</div>
+            <div class="c-title">${book.title}</div>
+          </div>
+        </div>
+      </div>
+      <div class="book-meta">
+        <h1>${book.title}</h1>
+        <div class="author">por <strong>${book.author}</strong></div>
+        <div class="meta-tags">
+          <span class="badge badge-blue">${book.genre||'Livro'}</span>
+          <span class="badge badge-gray">${book.pages||'—'} páginas</span>
+          <span class="badge badge-gray">${book.year||'—'}</span>
+          <span class="badge badge-green">Licença DLM</span>
+        </div>
+        <div class="desc">${book.description||''}</div>
+
+        <div class="purchase-box">
+          <div class="price-big">${formatPrice(book.price)}</div>
+
+          <div class="license-active ${alreadyOwns?'show':''}" id="owned-box">
+            <div style="font-size:.85rem;font-weight:600;color:var(--green);margin-bottom:.4rem">✅ Você já possui este livro</div>
+            <button class="btn btn-success btn-full" onclick="openBook()">📖 Abrir e-book</button>
+            <div class="tx-box" id="tx-info" style="display:none"></div>
+          </div>
+
+          <div id="buy-box" style="${alreadyOwns?'display:none':''}">
+            <button class="btn btn-primary btn-full btn-lg" id="btn-buy" onclick="buyBook()">
+              🛒 Comprar licença DLM
+            </button>
+            <div class="purchase-info">
+              🔐 Licença única registrada na blockchain Ethereum<br>
+              🔄 Pode ser revendida ou emprestada a qualquer momento<br>
+              ⛓ Royalty de ${book.royaltyBps||500/100||5}% para o autor em cada revenda
+            </div>
+          </div>
+
+          ${!Auth.isLoggedIn() ? `
+          <div style="margin-top:12px;text-align:center;font-size:.8rem;color:var(--muted)">
+            <a href="auth.html" style="color:var(--accent);font-weight:500">Faça login</a> para comprar
+          </div>` : ''}
+        </div>
+      </div>
+    </div>`;
+}
+
+async function buyBook() {
+  if (!Auth.isLoggedIn()) { window.location.href='auth.html'; return; }
+  const btn = document.getElementById('btn-buy');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spin"></span> Processando compra...';
+
+  try {
+    await delay(800);
+    // Mint da licença via API
+    const { licenseId } = await APIPublisher.mintLicense(book.id, Auth.getAddress());
+    APILicenses.addLicense(book.id, licenseId);
+
+    toast('Licença adquirida com sucesso!', 'ok');
+
+    document.getElementById('buy-box').style.display = 'none';
+    document.getElementById('owned-box').classList.add('show');
+  } catch(err) {
+    toast('Erro: ' + err.message, 'err');
+    btn.disabled = false;
+    btn.innerHTML = '🛒 Comprar licença DLM';
+  }
+}
+
+async function openBook() {
+  const myLicense = APILicenses.getMyLicenses().find(l => String(l.bookId) === String(book.id));
+  if (!myLicense) { toast('Licença não encontrada.', 'err'); return; }
+
+  const btn = document.querySelector('#owned-box button');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spin"></span> Validando posse na blockchain...';
+
+  try {
+    const result = await APILicenses.openBook(myLicense.licenseId);
+    if (result.granted) {
+      const txInfo = document.getElementById('tx-info');
+      txInfo.style.display = 'block';
+      txInfo.innerHTML = `✅ Acesso validado on-chain<br>TX: ${result.txHash?.slice(0,30)}...<br>Chave de sessão gerada — expira em 1h`;
+      toast('Acesso validado! Abrindo livro...', 'ok');
+      btn.innerHTML = '✅ Acesso confirmado';
+      // Em produção: redireciona para o leitor .dlm com a sessionKey
+    } else {
+      toast('Acesso negado pela blockchain.', 'err');
+      btn.disabled = false;
+      btn.innerHTML = '📖 Abrir e-book';
+    }
+  } catch(err) {
+    toast('Erro: ' + err.message, 'err');
+    btn.disabled = false;
+    btn.innerHTML = '📖 Abrir e-book';
+  }
+}
+</script>
+</body>
+</html>

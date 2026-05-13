@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>LivrosDLM — Minha Biblioteca</title>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Inter:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../css/style.css"/>
+  <style>
+    .lib-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:1.25rem; padding:0 2rem 3rem; }
+    .lib-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; }
+    .lib-cover { aspect-ratio:16/9; display:flex; align-items:center; justify-content:center; font-size:2.5rem; }
+    .lib-body { padding:.9rem 1rem; }
+    .lib-title { font-family:var(--serif); font-size:.95rem; font-weight:600; margin-bottom:.2rem; }
+    .lib-author { font-size:.78rem; color:var(--muted); margin-bottom:.75rem; }
+    .lib-actions { display:flex; gap:.5rem; }
+    .lib-actions .btn { flex:1; font-size:.72rem; padding:.35rem; }
+    .license-tag { font-family:var(--mono); font-size:.58rem; color:var(--muted); margin-top:.5rem; }
+    .wallet-info { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:1.1rem 1.25rem; margin:0 2rem 1.5rem; display:flex; align-items:center; justify-content:space-between; gap:1rem; flex-wrap:wrap; }
+    .wallet-info .wi-label { font-size:.78rem; color:var(--muted); margin-bottom:.2rem; }
+    .wallet-info .wi-val { font-family:var(--mono); font-size:.82rem; color:var(--ink); word-break:break-all; }
+  </style>
+</head>
+<body>
+
+<nav class="navbar">
+  <a href="../index.html" class="nav-brand">📚 Livros<span>DLM</span></a>
+  <ul class="nav-links">
+    <li><a href="../index.html">Início</a></li>
+    <li><a href="catalog.html">Catálogo</a></li>
+    <li><a href="biblioteca.html" class="active">Minha Biblioteca</a></li>
+    <li><a href="publisher.html">Editora</a></li>
+  </ul>
+  <div class="nav-right">
+    <span class="nav-wallet" id="nav-wallet"></span>
+    <a href="auth.html" class="btn btn-primary btn-sm" id="nav-login-btn">🦊 Entrar</a>
+    <button class="btn btn-ghost btn-sm" id="nav-logout-btn" style="display:none">Sair</button>
+  </div>
+</nav>
+
+<div class="page-header">
+  <h1>Minha Biblioteca</h1>
+  <p>Seus e-books com licença DLM registrada na blockchain</p>
+</div>
+
+<div id="not-logged" style="display:none">
+  <div class="empty-state">
+    <div class="empty-icon">🔐</div>
+    <h3>Faça login para ver sua biblioteca</h3>
+    <p>Você precisa conectar sua carteira para acessar seus livros.</p>
+    <br>
+    <a href="auth.html" class="btn btn-primary">🦊 Entrar com MetaMask</a>
+  </div>
+</div>
+
+<div id="logged-content" style="display:none">
+  <div class="wallet-info">
+    <div>
+      <div class="wi-label">Carteira conectada</div>
+      <div class="wi-val" id="wallet-display">—</div>
+    </div>
+    <div style="text-align:right">
+      <div class="wi-label">Licenças</div>
+      <div class="wi-val" id="license-count">0</div>
+    </div>
+  </div>
+
+  <div id="empty-library" style="display:none">
+    <div class="empty-state">
+      <div class="empty-icon">📚</div>
+      <h3>Sua biblioteca está vazia</h3>
+      <p>Compre livros no catálogo para vê-los aparecer aqui.</p>
+      <br>
+      <a href="catalog.html" class="btn btn-primary">Ver catálogo</a>
+    </div>
+  </div>
+
+  <div class="lib-grid" id="lib-grid"></div>
+</div>
+
+<div id="toast-container"></div>
+<script src="../js/api.js"></script>
+<script src="../js/app.js"></script>
+<script>
+const { Auth, APIBooks, APILicenses } = window.DLM;
+
+document.addEventListener('DOMContentLoaded', () => {
+  if (!Auth.isLoggedIn()) {
+    document.getElementById('not-logged').style.display = 'block';
+    return;
+  }
+
+  document.getElementById('logged-content').style.display = 'block';
+  const addr = Auth.getAddress() || '';
+  document.getElementById('wallet-display').textContent = addr.slice(0,10)+'...'+addr.slice(-6);
+
+  const licenses = APILicenses.getMyLicenses();
+  document.getElementById('license-count').textContent = licenses.length + ' licença(s)';
+
+  if (licenses.length === 0) {
+    document.getElementById('empty-library').style.display = 'block';
+    return;
+  }
+
+  const colors = ['#1e3a5f','#78350f','#3b0764','#1c1917','#7c3aed','#15803d'];
+  const grid = document.getElementById('lib-grid');
+
+  licenses.forEach(lic => {
+    const book = APIBooks.getById(lic.bookId);
+    if (!book) return;
+    const color = book.color || colors[book.id % colors.length];
+    const date  = new Date(lic.purchasedAt).toLocaleDateString('pt-BR');
+
+    const card = document.createElement('div');
+    card.className = 'lib-card';
+    card.innerHTML = `
+      <div class="lib-cover" style="background:${color}">
+        <span>${book.emoji||'📚'}</span>
+      </div>
+      <div class="lib-body">
+        <div class="lib-title">${book.title}</div>
+        <div class="lib-author">${book.author}</div>
+        <div class="lib-actions">
+          <button class="btn btn-primary" onclick="openBook('${lic.licenseId}','${book.title}')">📖 Ler</button>
+          <button class="btn" onclick="lendBook('${lic.licenseId}')">📤 Emprestar</button>
+          <button class="btn" onclick="sellBook('${lic.licenseId}','${book.id}')">🔄 Vender</button>
+        </div>
+        <div class="license-tag">License #${lic.licenseId} · comprado em ${date}</div>
+      </div>`;
+    grid.appendChild(card);
+  });
+});
+
+async function openBook(licenseId, title) {
+  toast(`Validando acesso ao "${title}" na blockchain...`, 'info', 2500);
+  try {
+    const result = await APILicenses.openBook(licenseId);
+    if (result.granted) toast(`✅ Acesso confirmado! TX: ${result.txHash.slice(0,16)}...`, 'ok');
+    else toast('Acesso negado pela blockchain.', 'err');
+  } catch(e) { toast('Erro: '+e.message,'err'); }
+}
+
+function lendBook(licenseId) {
+  const addr = prompt('Endereço Ethereum do tomador (0x...):');
+  if (!addr) return;
+  toast(`Empréstimo da licença #${licenseId} para ${addr.slice(0,10)}... iniciado`, 'info');
+}
+
+function sellBook(licenseId, bookId) {
+  const book = window.DLM.APIBooks.getById(bookId);
+  if (confirm(`Confirmar revenda de "${book?.title}"?\nVocê perderá o acesso permanentemente.`)) {
+    toast('Transferência de licença iniciada. Aguarde confirmação na blockchain.', 'info');
+  }
+}
+</script>
+</body>
+</html>
