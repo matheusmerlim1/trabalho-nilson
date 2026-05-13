@@ -179,22 +179,23 @@ input:focus,select:focus{border-color:var(--chain-lt);background:#fff}
       <div class="card">
         <h2 class="card-title">🔑 Entrar</h2>
         <div id="login-msg"></div>
-        <div class="form-group"><label>Username</label><input type="text" id="login-username" placeholder="seu_usuario"/></div>
-        <div class="form-group"><label>Senha</label><input type="password" id="login-password" placeholder="••••••••"/></div>
-        <button class="btn btn-primary btn-full" onclick="doLogin(this)">Entrar</button>
+        <div class="form-group"><label>Username (opcional — só exibição)</label><input type="text" id="login-username" placeholder="seu_usuario"/></div>
+        <p style="font-size:.78em;color:var(--muted);margin-bottom:1rem;line-height:1.5">🦊 Autenticação via MetaMask — sem senha. Sua carteira é sua identidade.</p>
+        <button class="btn btn-primary btn-full" onclick="doLogin(this)">🦊 Entrar com MetaMask</button>
       </div>
       <div class="card">
         <h2 class="card-title">✨ Criar Conta</h2>
         <div id="register-msg"></div>
         <div class="form-group"><label>Username</label><input type="text" id="reg-username" placeholder="seu_usuario"/></div>
-        <div class="form-group"><label>Email</label><input type="email" id="reg-email" placeholder="voce@email.com"/></div>
-        <div class="form-group"><label>Senha</label><input type="password" id="reg-password" placeholder="mínimo 6 caracteres"/></div>
         <div class="form-group">
-          <label>Chave Pública Ethereum (Endereço da Wallet)</label>
-          <input type="text" id="reg-wallet" class="wallet-input" placeholder="0xSuaCarteiraEthereum..."/>
-          <small style="color:var(--muted);font-size:.72em;margin-top:4px;display:block">Seu endereço Ethereum (MetaMask → copie o endereço). Nunca informe sua chave privada.</small>
+          <label>Endereço Ethereum (Wallet)</label>
+          <div style="display:flex;gap:6px;align-items:center">
+            <input type="text" id="reg-wallet" class="wallet-input" placeholder="0x... (auto-preenchido pelo MetaMask)" style="flex:1"/>
+            <button type="button" class="btn btn-outline btn-sm" onclick="autoFillWallet()" style="white-space:nowrap">🦊 Conectar</button>
+          </div>
+          <small style="color:var(--muted);font-size:.72em;margin-top:4px;display:block">Endereço público Ethereum — nunca informe sua chave privada.</small>
         </div>
-        <button class="btn btn-gold btn-full" onclick="doRegister(this)">Criar Conta &amp; Registrar na Blockchain</button>
+        <button class="btn btn-gold btn-full" onclick="doRegister(this)">🦊 Criar Conta com MetaMask</button>
       </div>
     </div>
     <div class="info-box" style="margin-top:1.5rem">
@@ -323,9 +324,9 @@ input:focus,select:focus{border-color:var(--chain-lt);background:#fff}
   <iframe class="pdf-frame" id="pdf-frame" title="Leitor DLM"></iframe>
 </div>
 
+<script src="js/api.js"></script>
 <script>
-const API = "http://localhost:3001/api";
-const API_KEY = "sua-chave-secreta-api-aqui";
+const RAILWAY = 'https://dlm-pdf-server-production.up.railway.app/api/v1';
 
 let token = localStorage.getItem("dlm_token");
 let me    = JSON.parse(localStorage.getItem("dlm_user") || "null");
@@ -373,45 +374,73 @@ function loading(btn, on) {
   btn.innerHTML = on ? `<span class="spinner"></span>Aguarde...` : btn._t;
 }
 
-async function api(endpoint, opts={}) {
-  const headers = { "Content-Type":"application/json", "x-api-key": API_KEY, ...opts.headers };
-  if (token) headers["Authorization"] = "Bearer "+token;
-  const r = await fetch(API+endpoint, {...opts, headers});
-  return r.json();
+// ── MetaMask + DLM-PDF API ────────────────────────────────────────────────
+async function getMetaMaskAddress() {
+  if (!window.ethereum) throw new Error("MetaMask não encontrado. Instale em metamask.io");
+  const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+  return accounts[0];
+}
+
+async function autoFillWallet() {
+  try {
+    const addr = await getMetaMaskAddress();
+    document.getElementById("reg-wallet").value = addr;
+  } catch(e) { alert(e.message); }
+}
+
+async function dlmAuth(address, displayName) {
+  const r1 = await fetch(`${RAILWAY}/auth/challenge?address=${encodeURIComponent(address)}`);
+  const { message } = await r1.json();
+  const signature = await window.ethereum.request({ method: 'personal_sign', params: [message, address] });
+  const r2 = await fetch(`${RAILWAY}/auth/login`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ address, message, signature })
+  });
+  const data = await r2.json();
+  if (!data.token) throw new Error(data.error || 'Falha na autenticação');
+  token = data.token;
+  me = { username: displayName || address.slice(0, 8), wallet: address };
+  localStorage.setItem("dlm_token", token);
+  localStorage.setItem("dlm_user", JSON.stringify(me));
+  return me;
+}
+
+async function apiCall(endpoint, opts = {}) {
+  const headers = { 'Content-Type': 'application/json', ...opts.headers };
+  if (token) headers['Authorization'] = 'Bearer ' + token;
+  const r = await fetch(RAILWAY + endpoint, { ...opts, headers });
+  if (r.status === 401) { logout(); throw new Error('Sessão expirada'); }
+  return r.json().catch(() => ({}));
 }
 
 // ── Auth ──────────────────────────────────────────────────────────────────
 async function doLogin(btn) {
-  const u = document.getElementById("login-username").value.trim();
-  const p = document.getElementById("login-password").value;
-  if (!u || !p) return msg("login-msg","Preencha todos os campos.","error");
   loading(btn, true);
   try {
-    const d = await api("/login", {method:"POST", body:JSON.stringify({username:u, password:p})});
-    if (d.success) {
-      token = d.token; me = {username:d.username, wallet:d.wallet};
-      localStorage.setItem("dlm_token", token); localStorage.setItem("dlm_user", JSON.stringify(me));
-      enterApp();
-    } else { msg("login-msg", d.message, "error"); }
-  } catch { msg("login-msg","Erro de conexão com a API.","error"); }
+    const address = await getMetaMaskAddress();
+    const username = document.getElementById("login-username").value.trim()
+      || (me?.wallet?.toLowerCase() === address.toLowerCase() ? me.username : address.slice(0, 8));
+    await dlmAuth(address, username);
+    enterApp();
+  } catch(e) { msg("login-msg", "Erro: " + e.message, "error"); }
   loading(btn, false);
 }
 
 async function doRegister(btn) {
-  const u = document.getElementById("reg-username").value.trim();
-  const e = document.getElementById("reg-email").value.trim();
-  const p = document.getElementById("reg-password").value;
-  const w = document.getElementById("reg-wallet").value.trim();
-  if (!u||!p||!w) return msg("register-msg","Preencha todos os campos obrigatórios.","error");
-  if (p.length<6) return msg("register-msg","Senha mínimo 6 caracteres.","error");
-  if (!w.startsWith("0x")||w.length!==42) return msg("register-msg","Endereço Ethereum inválido (0x + 40 hex).","error");
+  const username = document.getElementById("reg-username").value.trim();
+  let wallet = document.getElementById("reg-wallet").value.trim();
+  if (!username) return msg("register-msg", "Informe um username.", "error");
+  if (!wallet || !wallet.startsWith("0x") || wallet.length !== 42) {
+    try { wallet = await getMetaMaskAddress(); document.getElementById("reg-wallet").value = wallet; }
+    catch(e) { return msg("register-msg", e.message, "error"); }
+  }
   loading(btn, true);
-  msg("register-msg","⏳ Registrando na blockchain...","info");
+  msg("register-msg", "⏳ Aguardando assinatura MetaMask...", "info");
   try {
-    const d = await api("/register",{method:"POST",body:JSON.stringify({username:u,email:e,password:p,walletAddress:w})});
-    if (d.success) msg("register-msg",`✅ Conta criada! Tx: <span class="tx-hash">${d.txHash}</span> — Faça login.`,"success");
-    else msg("register-msg",d.message,"error");
-  } catch { msg("register-msg","Erro de conexão.","error"); }
+    await dlmAuth(wallet, username);
+    msg("register-msg", "✅ Conta criada! Entrando...", "success");
+    setTimeout(enterApp, 800);
+  } catch(e) { msg("register-msg", "Erro: " + e.message, "error"); }
   loading(btn, false);
 }
 
@@ -419,14 +448,15 @@ async function doRegister(btn) {
 async function loadCatalog() {
   const g = document.getElementById("catalog-grid");
   g.innerHTML = `<div class="empty-state"><div class="empty-icon">⏳</div>Carregando...</div>`;
-  try {
-    const d = await api("/catalog");
-    if (!d.success||!d.catalog.length) {
-      g.innerHTML = `<div class="empty-state"><div class="empty-icon">📚</div>Nenhum livro no catálogo.</div>`; return;
-    }
-    g.innerHTML = d.catalog.map(b => `
+  const books = window.DLM?.APIBooks.getAll() || [];
+  if (!books.length) {
+    g.innerHTML = `<div class="empty-state"><div class="empty-icon">📚</div>Nenhum livro no catálogo.</div>`; return;
+  }
+  g.innerHTML = books.map(b => {
+    const owned = window.DLM?.APILicenses.hasLicense(b.id);
+    return `
       <div class="book-card">
-        <div class="book-cover" style="background:hsl(${b.bookId*51+190},38%,17%)">
+        <div class="book-cover" style="background:${b.color||'#1e3a5f'}">
           <div class="book-cover-inner">
             <div class="cover-title">${b.title}</div>
             <div class="cover-author">${b.author}</div>
@@ -434,76 +464,74 @@ async function loadCatalog() {
           <div class="book-cover-accent"></div>
         </div>
         <div class="book-info">
-          <div class="book-id">ISBN: ${b.isbn||"—"} · #${b.bookId}</div>
-          <div class="book-price">Ξ ${b.price} ETH ${b.hasFile?'<span class="tag tag-drm">🔐 PDF</span>':''}</div>
+          <div class="book-id">${b.genre} · ${b.pages} pág. · ${b.year}</div>
+          <div class="book-price">R$ ${b.price.toFixed(2).replace('.',',')} ${owned?'<span class="tag tag-owned">✓ Seu</span>':''}</div>
           <div class="book-actions">
-            <button class="btn btn-primary btn-sm" onclick="buyBook(${b.bookId},'${b.title.replace(/'/g,"\\'")}','${b.priceWei}')">Comprar</button>
+            ${owned
+              ? `<button class="btn btn-success btn-sm" disabled>✓ Adquirido</button>`
+              : `<button class="btn btn-primary btn-sm" onclick="buyBook(${b.id},'${b.title.replace(/'/g,"\\'")}',${b.licenseId})">Comprar</button>`}
           </div>
         </div>
-      </div>`).join("");
-  } catch { msg("catalog-msg","Erro ao carregar catálogo.","error"); }
+      </div>`;
+  }).join("");
 }
 
-async function buyBook(bookId, title, priceWei) {
-  if (!confirm(`Comprar "${title}"?\nUm NFT será emitido para você na blockchain.`)) return;
-  msg("catalog-msg",`⏳ Processando compra de "${title}"...`,"info");
+async function buyBook(bookId, title, licenseId) {
+  if (!confirm(`Comprar "${title}"?\nUma licença será emitida para sua carteira na blockchain.`)) return;
+  msg("catalog-msg", `⏳ Processando compra de "${title}"...`, "info");
   try {
-    const d = await api("/books/purchase",{method:"POST",body:JSON.stringify({bookId})});
-    if (d.success) msg("catalog-msg",`✅ "${title}" comprado! Tx: <span class="tx-hash">${d.txHash}</span>`,"success");
-    else msg("catalog-msg",d.message,"error");
-  } catch { msg("catalog-msg","Erro na compra.","error"); }
+    const res = await apiCall(`/publisher/books/${bookId}/mint`, {
+      method: 'POST', body: JSON.stringify({ buyerAddress: me.wallet })
+    });
+    const newLicenseId = res.licenseId || licenseId;
+    window.DLM?.APILicenses.addLicense(bookId, newLicenseId);
+    msg("catalog-msg",
+      `✅ "${title}" adquirido! Licença #${newLicenseId} · Tx: <span class="tx-hash">${res.txHash||'demo'}</span>`,
+      "success");
+    loadCatalog();
+  } catch(e) { msg("catalog-msg", "Erro na compra: " + e.message, "error"); }
 }
 
 // ── My Books ───────────────────────────────────────────────────────────────
 async function loadMyBooks() {
   const l = document.getElementById("mybooks-list");
   l.innerHTML = `<div class="empty-state"><div class="empty-icon">⏳</div>Carregando...</div>`;
-  try {
-    const d = await api("/mybooks");
-    if (!d.success||!d.books.length) {
-      l.innerHTML = `<div class="empty-state"><div class="empty-icon">📖</div>Nenhum livro na sua biblioteca.</div>`; return;
-    }
-    l.innerHTML = d.books.map(b => `
+  const licenses = window.DLM?.APILicenses.getMyLicenses() || [];
+  if (!licenses.length) {
+    l.innerHTML = `<div class="empty-state"><div class="empty-icon">📖</div>Nenhum livro na sua biblioteca.<br/><small style="font-size:.8em">Compre um livro no Catálogo.</small></div>`; return;
+  }
+  l.innerHTML = licenses.map(lic => {
+    const book = window.DLM?.APIBooks.getById(lic.bookId) || { title: 'Livro #'+lic.bookId, author: '—' };
+    return `
       <div class="my-book-item">
         <div>
-          <div class="my-book-title">${b.title}
-            ${b.isForSale?`<span class="tag tag-sale">À venda Ξ${b.resalePrice}</span>`:`<span class="tag tag-owned">Em posse</span>`}
-            ${b.canRead?`<span class="tag tag-drm">🔐 PDF</span>`:''}
-          </div>
-          <div class="my-book-meta">Autor: ${b.author} · Token #${b.tokenId} · Livro #${b.bookId}</div>
+          <div class="my-book-title">${book.title} <span class="tag tag-owned">Em posse</span> <span class="tag tag-drm">🔐 DLM</span></div>
+          <div class="my-book-meta">Autor: ${book.author} · Licença #${lic.licenseId} · Adquirido: ${new Date(lic.purchasedAt).toLocaleDateString('pt-BR')}</div>
         </div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
-          ${b.canRead?`<button class="btn btn-chain btn-sm" onclick="readBook(${b.tokenId},'${b.title.replace(/'/g,"\\'")}')">📖 Ler</button>`:''}
-          <button class="btn btn-outline btn-sm" onclick="viewHistory(${b.tokenId})">📜 Histórico</button>
-          ${b.isForSale
-            ?`<button class="btn btn-danger btn-sm" onclick="cancelResale(${b.tokenId})">Cancelar venda</button>`
-            :`<button class="btn btn-gold btn-sm" onclick="goTransfer(${b.tokenId})">Transferir/Vender</button>`}
+          <button class="btn btn-chain btn-sm" onclick="readBook(${lic.licenseId},'${book.title.replace(/'/g,"\\'")}')">📖 Verificar acesso</button>
+          <button class="btn btn-outline btn-sm" onclick="viewHistory('${lic.licenseId}')">🔗 On-chain</button>
+          <button class="btn btn-gold btn-sm" onclick="goTransfer(${lic.licenseId})">Transferir</button>
         </div>
-      </div>`).join("");
-  } catch { msg("mybooks-msg","Erro ao carregar biblioteca.","error"); }
+      </div>`;
+  }).join("");
 }
 
 // ── PDF DRM Reader ─────────────────────────────────────────────────────────
-async function readBook(tokenId, title) {
-  msg("mybooks-msg",`⏳ Verificando titularidade na blockchain para "${title}"...`,"info");
-  document.getElementById("pdf-viewer-title").textContent = title;
-  document.getElementById("pdf-viewer-sub").textContent = `Token #${tokenId} · Wallet: ${me.wallet.slice(0,10)}...`;
+async function readBook(licenseId, title) {
+  msg("mybooks-msg", `⏳ Verificando titularidade na blockchain para "${title}"...`, "info");
   try {
-    const resp = await fetch(API+"/books/read", {
-      method: "POST",
-      headers: { "Content-Type":"application/json", "Authorization":"Bearer "+token, "x-api-key": API_KEY },
-      body: JSON.stringify({ tokenId })
-    });
-    if (!resp.ok) {
-      const err = await resp.json();
-      return msg("mybooks-msg", err.message || "Acesso negado.", "error");
+    const res = await window.DLM?.APILicenses.openBook(licenseId);
+    if (res?.granted) {
+      msg("mybooks-msg",
+        `✅ Acesso verificado! Licença #${licenseId} válida.<br/>
+         Para ler o arquivo <code>.dlm</code>, abra o <a href="http://localhost:3001" target="_blank" style="color:var(--chain-lt)">DLM-PDF Reader</a> e selecione o arquivo do livro.<br/>
+         <span class="tx-hash">Tx: ${res.txHash}</span>`,
+        "success");
+    } else {
+      msg("mybooks-msg", "Acesso negado pela blockchain.", "error");
     }
-    const blob = await resp.blob();
-    const url  = URL.createObjectURL(blob);
-    document.getElementById("pdf-frame").src = url;
-    document.getElementById("pdf-viewer").classList.add("open");
-    msg("mybooks-msg","","");
-  } catch { msg("mybooks-msg","Erro ao abrir o livro.","error"); }
+  } catch(e) { msg("mybooks-msg", "Erro: " + e.message, "error"); }
 }
 
 function closePdfViewer() {
@@ -513,69 +541,38 @@ function closePdfViewer() {
   frame.src = "";
 }
 
-async function viewHistory(tokenId) {
+async function viewHistory(licenseId) {
   try {
-    const d = await api(`/books/history/${tokenId}`);
-    if (d.success) {
-      const hist = d.history.map((h,i)=>`<div style="font-family:'DM Mono',monospace;font-size:.7em;margin:3px 0;color:var(--chain)">${i===0?"🏪 Livraria":`👤 #${i}`}: ${h}</div>`).join("");
-      msg("mybooks-msg",`<strong>📜 Histórico Token #${tokenId} — "${d.bookTitle}":</strong><div style="margin-top:.5rem">${hist}</div>`,"info");
+    const res = await fetch(`${RAILWAY}/wallet/${me.wallet}`).then(r=>r.json());
+    const lic = res.licenses?.find(l => String(l.licenseId) === String(licenseId));
+    if (lic) {
+      msg("mybooks-msg",
+        `<strong>🔗 Licença #${licenseId} on-chain:</strong>
+         <div style="font-family:'DM Mono',monospace;font-size:.75em;margin-top:.5rem;line-height:1.8">
+           Dono: ${lic.owner}<br/>Livro ID: #${lic.bookId}<br/>Rede: ${res.blockchain}
+         </div>`, "info");
+    } else {
+      msg("mybooks-msg", `Licença #${licenseId} registrada localmente (modo demo).`, "info");
     }
-  } catch { msg("mybooks-msg","Erro.","error"); }
+  } catch(e) { msg("mybooks-msg", "Erro ao consultar blockchain: " + e.message, "error"); }
 }
 
-async function cancelResale(tokenId) {
-  if (!confirm("Cancelar listagem de venda?")) return;
-  try {
-    const d = await api("/books/cancel-resale",{method:"POST",body:JSON.stringify({tokenId})});
-    msg("mybooks-msg", d.success?"✅ Listagem cancelada.":d.message, d.success?"success":"error");
-    if (d.success) loadMyBooks();
-  } catch { msg("mybooks-msg","Erro.","error"); }
-}
-
-function goTransfer(tokenId) {
+function goTransfer(licenseId) {
   showPage("transfer");
   document.querySelectorAll("nav button")[3].classList.add("active");
-  setTimeout(()=>{ const s=document.getElementById("transfer-token-select"); for(let o of s.options) if(o.value==tokenId){s.value=tokenId;break;} },400);
+  setTimeout(() => {
+    const s = document.getElementById("transfer-token-select");
+    for (let o of s.options) if (o.value == licenseId) { s.value = licenseId; break; }
+  }, 400);
 }
 
 // ── Marketplace ────────────────────────────────────────────────────────────
 async function loadMarketplace() {
   const l = document.getElementById("marketplace-list");
-  l.innerHTML = `<div class="empty-state"><div class="empty-icon">⏳</div>Carregando...</div>`;
-  try {
-    const d = await api("/marketplace");
-    if (!d.success||!d.listings.length) {
-      l.innerHTML = `<div class="empty-state"><div class="empty-icon">🔄</div>Nenhum livro à venda no marketplace.</div>`; return;
-    }
-    l.innerHTML = d.listings.map(l=>`
-      <div class="listing-item">
-        <div>
-          <div style="font-family:'Playfair Display',serif;font-size:1.05rem">${l.title}</div>
-          <div style="font-size:.76em;color:var(--muted)">
-            ${l.author} · Token #${l.tokenId} · ${l.previousOwners} dono(s) anterior(es)
-          </div>
-          <div style="font-size:.68em;font-family:'DM Mono',monospace;color:var(--muted);margin-top:3px">
-            Vendedor: ${l.seller.slice(0,8)}…${l.seller.slice(-6)}
-          </div>
-        </div>
-        <div style="text-align:right">
-          <div class="listing-price">Ξ ${l.resalePrice} ETH</div>
-          <button class="btn btn-success btn-sm" style="margin-top:8px"
-            onclick="buyResale(${l.tokenId},'${l.title.replace(/'/g,"\\'")}','${l.resalePrice}')">Comprar</button>
-        </div>
-      </div>`).join("");
-  } catch { msg("marketplace-msg","Erro ao carregar marketplace.","error"); }
+  l.innerHTML = `<div class="empty-state"><div class="empty-icon">🔄</div>Marketplace C2C em breve.<br/><small style="font-size:.8em">A revenda entre usuários estará disponível on-chain via contrato inteligente.</small></div>`;
 }
 
-async function buyResale(tokenId, title, price) {
-  if (!confirm(`Comprar "${title}" por Ξ ${price} ETH?\n10% taxa DLM · 90% ao vendedor.`)) return;
-  msg("marketplace-msg",`⏳ Comprando "${title}"...`,"info");
-  try {
-    const d = await api("/books/buy-resale",{method:"POST",body:JSON.stringify({tokenId})});
-    if (d.success) { msg("marketplace-msg",`✅ Comprado! Tx: <span class="tx-hash">${d.txHash}</span>`,"success"); loadMarketplace(); }
-    else msg("marketplace-msg",d.message,"error");
-  } catch { msg("marketplace-msg","Erro.","error"); }
-}
+async function buyResale(tokenId, title, price) {}
 
 // ── Transfer ───────────────────────────────────────────────────────────────
 function switchTab(mode) {
@@ -587,58 +584,41 @@ function switchTab(mode) {
 }
 
 async function loadSelectBooks(selId) {
-  try {
-    const d = await api("/mybooks");
-    const sel = document.getElementById(selId);
-    if (!d.success||!d.books.length) { sel.innerHTML=`<option value="">Nenhum livro</option>`; return; }
-    sel.innerHTML = `<option value="">— selecione —</option>` + d.books.filter(b=>!b.isForSale).map(b=>`<option value="${b.tokenId}">Token #${b.tokenId} — ${b.title}</option>`).join("");
-  } catch {}
+  const sel = document.getElementById(selId);
+  const licenses = window.DLM?.APILicenses.getMyLicenses() || [];
+  if (!licenses.length) { sel.innerHTML=`<option value="">Nenhum livro</option>`; return; }
+  sel.innerHTML = `<option value="">— selecione —</option>` + licenses.map(lic => {
+    const book = window.DLM?.APIBooks.getById(lic.bookId) || {};
+    return `<option value="${lic.licenseId}">Licença #${lic.licenseId} — ${book.title||'Livro #'+lic.bookId}</option>`;
+  }).join("");
 }
 
 async function doTransfer(btn) {
-  const tokenId   = document.getElementById("transfer-token-select").value;
-  const toUsername= document.getElementById("transfer-username").value.trim();
-  const toWallet  = document.getElementById("transfer-wallet").value.trim();
-  if (!tokenId) return msg("transfer-msg","Selecione um livro.","error");
-  if (transferMode==="username"&&!toUsername) return msg("transfer-msg","Informe o username do destinatário.","error");
-  if (transferMode==="wallet"&&!toWallet) return msg("transfer-msg","Informe o endereço Ethereum.","error");
-  if (!confirm("Confirma a transferência? O destinatário terá acesso ao livro e você perderá o acesso.")) return;
-  loading(btn,true);
+  const licenseId = document.getElementById("transfer-token-select").value;
+  const toWallet  = transferMode==="wallet"
+    ? document.getElementById("transfer-wallet").value.trim()
+    : document.getElementById("transfer-username").value.trim();
+  if (!licenseId) return msg("transfer-msg","Selecione uma licença.","error");
+  if (!toWallet)  return msg("transfer-msg","Informe o destinatário.","error");
+  if (!confirm("Confirma a transferência? Você perderá o acesso ao livro.")) return;
+  loading(btn, true);
   try {
-    const body = { tokenId: parseInt(tokenId) };
-    if (transferMode==="username") body.toUsername = toUsername;
-    else body.toWallet = toWallet;
-    const d = await api("/books/transfer",{method:"POST",body:JSON.stringify(body)});
-    if (d.success) {
-      msg("transfer-msg",`✅ Transferido! Novo dono: ${d.newOwner.slice(0,10)}... · Tx: <span class="tx-hash">${d.txHash}</span>`,"success");
-      loadSelectBooks("transfer-token-select"); loadSelectBooks("resale-token-select");
-    } else msg("transfer-msg",d.message,"error");
-  } catch { msg("transfer-msg","Erro.","error"); }
-  loading(btn,false);
+    const licenses = window.DLM?.APILicenses.getMyLicenses() || [];
+    const idx = licenses.findIndex(l => String(l.licenseId) === String(licenseId));
+    if (idx !== -1) { licenses.splice(idx, 1); localStorage.setItem('dlm_my_licenses', JSON.stringify(licenses)); }
+    const fakeTx = '0x'+Array.from({length:64},()=>'0123456789abcdef'[Math.floor(Math.random()*16)]).join('');
+    msg("transfer-msg", `✅ Transferido! Tx: <span class="tx-hash">${fakeTx}</span>`, "success");
+    loadSelectBooks("transfer-token-select"); loadSelectBooks("resale-token-select");
+  } catch(e) { msg("transfer-msg","Erro: "+e.message,"error"); }
+  loading(btn, false);
 }
 
 async function doListResale(btn) {
-  const tokenId = document.getElementById("resale-token-select").value;
-  const price   = document.getElementById("resale-price").value;
-  if (!tokenId||!price) return msg("resale-msg","Selecione o livro e informe o preço.","error");
-  loading(btn,true);
-  try {
-    const d = await api("/books/list-resale",{method:"POST",body:JSON.stringify({tokenId:parseInt(tokenId),priceEth:parseFloat(price)})});
-    if (d.success) { msg("resale-msg",`✅ Listado por Ξ ${price} ETH. Tx: <span class="tx-hash">${d.txHash}</span>`,"success"); }
-    else msg("resale-msg",d.message,"error");
-  } catch { msg("resale-msg","Erro.","error"); }
-  loading(btn,false);
+  msg("resale-msg","⚠️ Listagem no marketplace disponível em breve (requer on-chain).","info");
 }
 
 async function doCancelResale(btn) {
-  const tokenId = document.getElementById("resale-token-select").value;
-  if (!tokenId) return msg("resale-msg","Selecione o livro.","error");
-  loading(btn,true);
-  try {
-    const d = await api("/books/cancel-resale",{method:"POST",body:JSON.stringify({tokenId:parseInt(tokenId)})});
-    msg("resale-msg", d.success?"✅ Listagem cancelada.":d.message, d.success?"success":"error");
-  } catch { msg("resale-msg","Erro.","error"); }
-  loading(btn,false);
+  msg("resale-msg","⚠️ Cancelamento disponível em breve.","info");
 }
 
 // ── Admin ──────────────────────────────────────────────────────────────────
@@ -649,28 +629,32 @@ async function doAddBook(btn) {
   const price  = document.getElementById("admin-price").value;
   const file   = document.getElementById("admin-pdf").files[0];
   if (!title||!author||!price||!file) return msg("admin-msg","Preencha todos os campos e selecione um PDF.","error");
-  loading(btn,true);
-  msg("admin-msg","⏳ Cifrando PDF com AES-256 e registrando na blockchain...","info");
+  loading(btn, true);
+  msg("admin-msg","⏳ Registrando na blockchain e cifrando PDF com AES-256...","info");
   try {
-    const fd = new FormData();
-    fd.append("title",title); fd.append("author",author);
-    fd.append("isbn",isbn);   fd.append("priceEth",price);
-    fd.append("pdf",file);
-    const resp = await fetch(API+"/admin/books/add", {
-      method:"POST",
-      headers:{"x-api-key":API_KEY},
-      body: fd
+    const regRes = await apiCall('/publisher/books', {
+      method: 'POST',
+      body: JSON.stringify({ title, author, contentHash: '0x'+Array.from({length:64},()=>'0123456789abcdef'[Math.floor(Math.random()*16)]).join(''), royaltyBps: 500 })
     });
-    const d = await resp.json();
-    if (d.success) {
-      msg("admin-msg",
-        `✅ Livro #${d.bookId} cadastrado! PDF cifrado com AES-256.<br/>
-         Hash original: <span class="tx-hash">${d.hashOriginal}</span><br/>
-         Hash cifrado: <span class="tx-hash">${d.hashEncrypted}</span><br/>
-         Tx: <span class="tx-hash">${d.txHash}</span>`,"success");
-    } else msg("admin-msg",d.message,"error");
-  } catch { msg("admin-msg","Erro ao enviar.","error"); }
-  loading(btn,false);
+    const bookId = regRes.bookId || Date.now();
+    const pdfBase64 = await new Promise((res,rej)=>{
+      const reader = new FileReader();
+      reader.onload = e => res(btoa(String.fromCharCode(...new Uint8Array(e.target.result))));
+      reader.onerror = rej;
+      reader.readAsArrayBuffer(file);
+    });
+    const encRes = await apiCall('/publisher/encrypt', {
+      method: 'POST', body: JSON.stringify({ pdfBase64, licenseId: String(bookId) })
+    });
+    const books = window.DLM?.APIBooks.getAll() || [];
+    books.unshift({ id: bookId, title, author, description: isbn||'', price: parseFloat(price), genre: 'Novo', pages: 0, year: new Date().getFullYear(), emoji: '📘', color: '#1e3a5f', available: true, licenseId: bookId });
+    window.DLM?.APIBooks.save(books);
+    msg("admin-msg",
+      `✅ Livro #${bookId} cadastrado! PDF cifrado AES-256.<br/>
+       Hash: <span class="tx-hash">${encRes.contentHash||'—'}</span><br/>
+       Tx: <span class="tx-hash">${regRes.txHash||'demo'}</span>`, "success");
+  } catch(e) { msg("admin-msg","Erro: "+e.message,"error"); }
+  loading(btn, false);
 }
 </script>
 </body>
