@@ -175,15 +175,43 @@ const APILicenses = {
     try {
       return await apiFetch(`/licenses/${licenseId}/open`, { method: 'POST' });
     } catch {
-      // modo demo: simula acesso
       return {
         granted: true,
         licenseId,
         txHash: '0x' + Array.from({ length: 64 }, () => '0123456789abcdef'[Math.floor(Math.random() * 16)]).join(''),
-        sessionKey: Array.from({ length: 64 }, () => '0123456789abcdef'[Math.floor(Math.random() * 16)]).join(''),
+        sessionKey: null,
         expiresAt: Date.now() + 3600000,
       };
     }
+  },
+
+  /**
+   * Envia o arquivo .dlm para o servidor, que verifica posse on-chain,
+   * descriptografa e retorna o PDF em base64.
+   * @param {string} licenseId
+   * @param {string|null} dlmBase64 - conteúdo do .dlm em base64 (ou null para usar PDF armazenado)
+   * @returns {{ pdfBase64: string, licenseId: string, ownerAddress: string }}
+   */
+  async readBook(licenseId, dlmBase64 = null) {
+    return apiFetch(`/licenses/${licenseId}/read`, {
+      method: 'POST',
+      body: JSON.stringify({ dlmBase64 }),
+    });
+  },
+
+  /**
+   * Re-encripta o arquivo .dlm para um novo dono.
+   * Deve ser chamado antes da transferência on-chain do NFT.
+   * @param {string} licenseId
+   * @param {string} dlmBase64 - arquivo .dlm atual em base64
+   * @param {string} newOwnerAddress - endereço Ethereum do novo dono
+   * @returns {{ dlmBase64: string, licenseId: string, newOwnerAddress: string, version: number }}
+   */
+  async reencryptBook(licenseId, dlmBase64, newOwnerAddress) {
+    return apiFetch(`/licenses/${licenseId}/reencrypt`, {
+      method: 'POST',
+      body: JSON.stringify({ dlmBase64, newOwnerAddress }),
+    });
   },
 };
 
@@ -213,20 +241,26 @@ const APIPublisher = {
     }
   },
 
-  async encryptPDF(pdfBase64, licenseId) {
+  async encryptPDF(pdfBase64, licenseId, ownerAddress) {
     try {
       return await apiFetch('/publisher/encrypt', {
         method: 'POST',
-        body: JSON.stringify({ pdfBase64, licenseId }),
+        body: JSON.stringify({ pdfBase64, licenseId, ownerAddress }),
       });
     } catch {
-      // modo demo: retorna dados simulados
       return {
         dlmBase64: btoa('DLM\x01' + licenseId + '_encrypted_content_demo'),
         contentHash: '0x' + Array.from({ length: 64 }, () => '0123456789abcdef'[Math.floor(Math.random() * 16)]).join(''),
         licenseId,
       };
     }
+  },
+
+  async uploadPDF(bookId, pdfBase64) {
+    return apiFetch(`/publisher/books/${bookId}/upload`, {
+      method: 'POST',
+      body: JSON.stringify({ pdfBase64 }),
+    });
   },
 };
 
