@@ -114,3 +114,27 @@ Claude Code também sincroniza ao encerrar a sessão via hook `Stop` em `.claude
 
 **Sempre que houver qualquer alteração no projeto, realizar o commit imediatamente após a mudança.**
 Não acumular alterações sem commitar. Cada conjunto de mudanças relacionadas deve ter seu próprio commit descritivo antes de continuar.
+
+## Features Planejadas (não implementar sem ordem explícita)
+
+### Sistema de Transferência de Posse com Identificação por Nome
+
+1. **Cadastro de nome no login** — ao entrar com MetaMask em `pages/auth.html`, solicitar nome completo do usuário. Salvar via `registerUser(username)` no contrato ou em banco local vinculado ao endereço. Sem nome cadastrado não pode transferir.
+
+2. **Biblioteca lista livros da carteira** — `pages/biblioteca.html` deve buscar todos os tokens ERC-721 do endereço conectado via `contract.userTokens(address)` e exibir com título, capa e opções (Ler / Transferir / Vender).
+
+3. **Transferência exige nome do destinatário visível** — ao iniciar transferência, o remetente informa o endereço Ethereum do destinatário; o sistema busca e exibe o **nome completo cadastrado** desse endereço para confirmação. Sem nome cadastrado do destinatário, a transferência é bloqueada.
+
+4. **Re-encriptação na transferência** — o servidor gera novo `.dlm` com `ownerAddress` do destinatário (nova chave HKDF). O `.dlm` antigo é invalidado. O novo arquivo é baixado automaticamente para ser entregue ao destinatário fora da plataforma (e-mail, mensagem).
+
+5. **Transferência do NFT na blockchain** — após a re-encriptação, acionar `transferToUser(tokenId, newOwnerAddress)` no contrato para transferir o NFT. As duas ações (re-encriptar + transferir NFT) devem ser atômicas ou com rollback claro se uma falhar.
+
+6. **DLM-PDF Platform verifica cadeia** — se `ownerAddress` do `.dlm` não bate com a carteira atual, o sistema consulta o servidor/blockchain: se há transferência registrada, oferece re-encriptar para o novo dono; caso contrário, nega acesso.
+
+**Arquivos a modificar**:
+- `pages/auth.html` — adicionar campo de nome no cadastro
+- `pages/biblioteca.html` — listar tokens do contrato, botão Transferir com modal de nome
+- `server.js` — rota `POST /api/reencrypt` (valida assinatura do dono atual, re-encripta para novo dono)
+- `server.js` — rota `GET /api/users/:address` (retorna nome pelo endereço)
+- `DLMBookstore.sol` — `getUserByAddress(address)` retornando UserProfile
+- `DLM-PDF Platform / js/reader.js` — verificação de cadeia de custódia ao abrir .dlm
