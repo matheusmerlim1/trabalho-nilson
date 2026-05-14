@@ -109,3 +109,8 @@ Claude Code também sincroniza ao encerrar a sessão via hook `Stop` em `.claude
    - [ ] `js/api.js` aponta para a URL correta
    - [ ] Contrato compila sem warnings (`npx hardhat compile`)
 4. Commit e push — o hook de post-commit empurra automaticamente
+
+## Regra de Commit
+
+**Sempre que houver qualquer alteração no projeto, realizar o commit imediatamente após a mudança.**
+Não acumular alterações sem commitar. Cada conjunto de mudanças relacionadas deve ter seu próprio commit descritivo antes de continuar.
