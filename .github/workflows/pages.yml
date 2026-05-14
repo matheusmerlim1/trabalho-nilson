@@ -1,11 +1,8 @@
-name: Deploy Livraria DLM para GitHub Pages
+name: Deploy GitHub Pages
 
 on:
   push:
     branches: [main]
-    paths:
-      - "Livraria dlm/**"
-
   workflow_dispatch:
 
 permissions:
@@ -19,10 +16,11 @@ concurrency:
 
 jobs:
   deploy:
+    runs-on: ubuntu-latest
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
-    runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -30,7 +28,7 @@ jobs:
       - name: Setup Pages
         uses: actions/configure-pages@v5
 
-      - name: Upload site
+      - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
           path: "Livraria dlm"
