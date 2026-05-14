@@ -1,8 +1,28 @@
 {
   "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "agent",
+            "timeout": 120,
+            "statusMessage": "Agente de testes: analisando alterações...",
+            "prompt": "Você é o agente de testes e segurança do projeto Livraria DLM (DRM via NFT ERC-721/MetaMask). Um arquivo foi recém-modificado.\n\nEntrada JSON recebida: $ARGUMENTS\n\nExecute em sequência:\n\n1. **Identificar arquivo**: extraia o caminho de tool_input.file_path. Se não existir, encerre silenciosamente.\n\n2. **Ler e classificar o arquivo** com Read:\n   - DLMBookstore.sol → verificar: onlyOwner, funções payable (reentrância), overflow em royalties, transferência de NFT sem re-encriptação do .dlm\n   - server.js → verificar: verifyToken (JWT), ownerOf on-chain, HMAC do arquivo .dlmpdf, armazenamento de chaves em storage/keys/, encryptBuf/decryptBuf\n   - js/api.js → verificar: Auth (JWT em localStorage), apiFetch (headers de autorização), dlmBase64 exposto, modo demo bypassando segurança\n   - pages/*.html → verificar: XSS, chaves ou tokens hardcoded, links para auth sem verificação\n   - deploy.js → verificar: private key exposta, rede de deploy (mainnet vs testnet)\n\n3. **Localizar testes existentes**: use Glob com padrões test*.js, *.test.js, tests/*.js, __tests__/*.js, test/*.js\n\n4. **Criar testes se necessário**: se não existir teste para o arquivo modificado:\n   - Leia package.json para identificar framework (jest, mocha, hardhat/chai para .sol)\n   - Para server.js: testar /api/admin/books/add (autenticação por API key), /api/books/read (JWT + ownerOf), encryptBuf/decryptBuf round-trip\n   - Para DLMBookstore.sol: testar registerUser, purchaseBook (pagamento correto), listForResale, buyResaleBook (royalty 10%), transferToUser\n   - Para api.js: testar Auth.save/clear/isLoggedIn, APILicenses.hasLicense, modo demo (não deve expor PDF real)\n   - Se não houver framework, use node:test + node:assert para JS e Hardhat para Solidity\n   - Crie em tests/<nome>.test.js (JS) ou test/<nome>.test.js (Solidity)\n\n5. **Executar testes**: se scripts.test existir no package.json, execute `npm test` via Bash. Limite saída a 50 linhas.\n\n6. **Registrar alertas**: se encontrar problema de segurança crítico, escreva com Bash em .claude/security-alerts.log:\n   [YYYY-MM-DDTHH:mm:ss] <arquivo>: <descrição do problema>\n   Crie o arquivo se não existir.\n\nRegras: não modifique arquivos de código-fonte. Apenas crie/atualize arquivos em tests/ e .claude/security-alerts.log. Seja conciso."
+          }
+        ]
+      }
+    ],
     "Stop": [
       {
         "hooks": [
+          {
+            "type": "command",
+            "shell": "powershell",
+            "timeout": 10,
+            "statusMessage": "Gerando checklist de segurança...",
+            "command": "$status = git status --porcelain 2>$null; $criticos = git diff --name-only HEAD 2>$null | Select-String -Pattern 'server|auth|[.]sol|deploy|crypto|encrypt|decrypt'; $msg = if ($criticos) { '⚠ Arquivos críticos modificados: ' + ($criticos -join ', ') + '. Execute /security-review antes do PR.' } elseif ($status) { 'Sessão encerrada com alterações pendentes. Verifique testes e segurança.' } else { 'Sessão encerrada. Sem alterações pendentes.' }; @{ systemMessage = $msg } | ConvertTo-Json -Compress"
+          },
           {
             "type": "command",
             "shell": "powershell",
