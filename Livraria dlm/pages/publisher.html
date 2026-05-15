@@ -89,6 +89,14 @@
       </div>
       <div class="field"><label>Emoji da capa</label><input type="text" id="p-emoji" placeholder="📚" maxlength="2"/></div>
     </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem">
+      <div class="field"><label>Seu nome completo *</label><input type="text" id="p-pub-name" placeholder="Ex: Maria Silva"/></div>
+      <div class="field"><label>Seu CPF *</label><input type="text" id="p-pub-cpf" placeholder="000.000.000-00" maxlength="14"/></div>
+    </div>
+    <div style="font-size:.72rem;color:var(--muted);margin-bottom:.75rem;line-height:1.5">
+      🔐 Nome e CPF são usados para registrar você como titular do arquivo <code>.dlm</code> gerado (criptografia v3).
+      Necessário para que o arquivo possa ser lido no <strong>DLM-PDF Reader</strong> sem validação blockchain.
+    </div>
 
     <div style="margin-bottom:.75rem">
       <label style="font-size:.78rem;font-weight:500;color:var(--muted);display:block;margin-bottom:.35rem">PDF do livro *</label>
@@ -127,7 +135,7 @@
 <script src="../js/api.js"></script>
 <script src="../js/app.js"></script>
 <script>
-const { Auth, APIBooks, APIPublisher } = window.DLM;
+const { Auth, APIBooks, APIPublisher, APIDLM } = window.DLM;
 
 let pdfBuffer = null;
 let dlmBuffer = null;
@@ -167,13 +175,16 @@ async function loadPDF(file) {
 }
 
 function checkPublishReady() {
-  const title  = document.getElementById('p-title').value.trim();
-  const author = document.getElementById('p-author').value.trim();
-  const price  = document.getElementById('p-price').value;
-  document.getElementById('btn-publish').disabled = !(title && author && price && pdfBuffer);
+  const title   = document.getElementById('p-title').value.trim();
+  const author  = document.getElementById('p-author').value.trim();
+  const price   = document.getElementById('p-price').value;
+  const pubName = document.getElementById('p-pub-name').value.trim();
+  const pubCpf  = document.getElementById('p-pub-cpf').value.replace(/\D/g, '');
+  document.getElementById('btn-publish').disabled =
+    !(title && author && price && pdfBuffer && pubName.length >= 3 && pubCpf.length === 11);
 }
 
-['p-title','p-author','p-price'].forEach(id => {
+['p-title','p-author','p-price','p-pub-name','p-pub-cpf'].forEach(id => {
   document.getElementById(id)?.addEventListener('input', checkPublishReady);
 });
 
@@ -185,34 +196,38 @@ async function publishBook() {
   const royalty = parseInt(document.getElementById('p-royalty').value) || 5;
   const genre   = document.getElementById('p-genre').value;
   const emoji   = document.getElementById('p-emoji').value || '📚';
+  const pubName = document.getElementById('p-pub-name').value.trim();
+  const pubCpf  = document.getElementById('p-pub-cpf').value.replace(/\D/g, '');
 
   const btn = document.getElementById('btn-publish');
   btn.disabled = true;
-  btn.innerHTML = '<span class="spin"></span> Registrando na blockchain...';
+  btn.innerHTML = '<span class="spin"></span> Registrando titular...';
 
   const prog = document.getElementById('pub-progress');
 
   try {
-    prog.style.width = '20%';
-    await delay(500);
+    prog.style.width = '15%';
+
+    // Registra o publisher na DRM API (nome + CPF vinculados ao endereço)
+    const publicKey = Auth.getAddress();
+    await APIDLM.registerUser(publicKey, pubName, pubCpf);
 
     // SHA-256 do PDF
     const hashBuffer = await crypto.subtle.digest('SHA-256', pdfBuffer);
     const hashHex    = '0x' + Array.from(new Uint8Array(hashBuffer)).map(b=>b.toString(16).padStart(2,'0')).join('');
 
-    prog.style.width = '45%';
-    btn.innerHTML = '<span class="spin"></span> Encriptando PDF...';
-    await delay(400);
+    prog.style.width = '40%';
+    btn.innerHTML = '<span class="spin"></span> Encriptando PDF (v3)...';
 
-    // Encripta via API
-    const pdfBase64  = btoa(String.fromCharCode(...new Uint8Array(pdfBuffer)));
-    const licenseId  = Date.now();
-    const encResult  = await APIPublisher.encryptPDF(pdfBase64, licenseId);
-    dlmBuffer        = Uint8Array.from(atob(encResult.dlmBase64||btoa('demo')), c=>c.charCodeAt(0)).buffer;
+    // Encripta via DRM API (v3 — registra titular no licenseRegistry)
+    const pdfBase64 = btoa(String.fromCharCode(...new Uint8Array(pdfBuffer)));
+    const encResult = await APIDLM.encrypt(pdfBase64, publicKey, pubName, pubCpf);
+    const licenseId = encResult.licenseId;
+    dlmBuffer = Uint8Array.from(atob(encResult.dlmBase64), c => c.charCodeAt(0)).buffer;
 
-    prog.style.width = '75%';
+    prog.style.width = '70%';
     btn.innerHTML = '<span class="spin"></span> Publicando livro...';
-    await delay(600);
+    await delay(400);
 
     // Registra o livro localmente (demo) + na blockchain
     const book = APIBooks.add({ title, author, description:desc, price, genre, emoji, royaltyBps: royalty*100, color: null });
@@ -223,7 +238,7 @@ async function publishBook() {
     const result = document.getElementById('pub-result');
     result.classList.add('show');
     document.getElementById('pub-hash').innerHTML =
-      `License ID: ${licenseId}<br>SHA-256: ${hashHex.slice(0,34)}...<br>Royalty: ${royalty}%`;
+      `License ID: ${licenseId}<br>SHA-256: ${hashHex.slice(0,34)}...<br>Titular: ${pubName}<br>Royalty: ${royalty}%<br><small style="color:var(--green)">✅ Arquivo .dlm v3 — abrível no DLM-PDF Reader com sua carteira MetaMask</small>`;
 
     document.getElementById('btn-dl-dlm').onclick = () => {
       const blob = new Blob([dlmBuffer], {type:'application/octet-stream'});
@@ -233,7 +248,7 @@ async function publishBook() {
       URL.revokeObjectURL(url);
     };
 
-    toast(`"${title}" publicado com sucesso!`, 'ok');
+    toast(`"${title}" publicado com sucesso! Arquivo .dlm v3 gerado.`, 'ok');
     renderMyBooks();
 
     btn.innerHTML = '✅ Publicado com sucesso';

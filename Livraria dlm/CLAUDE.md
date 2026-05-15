@@ -125,6 +125,8 @@ Claude Code também sincroniza ao encerrar a sessão via hook `Stop` em `.claude
 
 **Regra de segurança: após qualquer alteração no projeto, o agente de segurança é responsável por verificar todo o sistema antes do commit.**
 
+**Regra de erros: sempre que um erro for encontrado e corrigido, um teste automatizado ou cenário de teste referente a ele deve ser criado imediatamente. Não corrigir sem testar.**
+
 1. **`/security-review`** — verificar JWT, armazenamento de chaves AES, validação on-chain, rotas proxy DRM
 2. **`/review`** — coerência entre frontend, servidor, DRM API e contrato
 3. Checklist:
