@@ -70,16 +70,38 @@ Usado para desenvolvimento sem depender do DLM PDF API. **Não commitar `.env` n
 
 ## Integração com DLM PDF API
 
-A URL da API é configurada em `js/api.js`:
+A URL da API blockchain/licenças é configurada em `js/api.js`:
 ```js
-const API_BASE = window.DLM_API_BASE || 'http://localhost:3000/api/v1';
+const API_BASE = window.DLM_API_BASE || 'https://dlm-pdf-server-production.up.railway.app/api/v1';
 ```
 
-Para trocar o servidor em produção, defina `window.DLM_API_BASE` antes de carregar `api.js`:
+A URL da DRM API (criptografia centralizada) é configurada separadamente:
+```js
+const DRM_API_BASE = window.DLM_DRM_API_BASE || 'https://dlm-pdf-server-production.up.railway.app/api/v1';
+```
+
+Para trocar os servidores em produção:
 ```html
-<script>window.DLM_API_BASE = 'https://sua-api.com/api/v1';</script>
+<script>
+  window.DLM_API_BASE     = 'https://sua-api.com/api/v1';
+  window.DLM_DRM_API_BASE = 'https://sua-drm-api.com/api/v1';
+</script>
 <script src="js/api.js"></script>
 ```
+
+### Métodos DRM disponíveis via `window.DLM.APIDLM`
+
+| Método | Descrição |
+|--------|-----------|
+| `APIDLM.registerUser(address, name, cpf)` | Cadastra usuário |
+| `APIDLM.lookupUser(address)` | Consulta nome+CPF por endereço |
+| `APIDLM.encrypt(pdfBase64, publicKey, userName, userCPF, licenseId?)` | Encripta PDF → .dlm v3 |
+| `APIDLM.decrypt(dlmBase64, publicKey, signature, message)` | Decifra com cadeia de custódia |
+| `APIDLM.previewTransfer(toPublicKey, licenseId)` | Consulta destinatário |
+| `APIDLM.transfer(fromKey, toKey, licenseId, sig, msg)` | Executa transferência |
+
+O servidor (`server.js`) também expõe rotas proxy em `/api/drm/*` para operações que precisam
+combinar DRM + blockchain (ex.: transferência que atualiza DRM + NFT on-chain).
 
 ## GitHub & Auto-Sync
 
@@ -101,12 +123,16 @@ Claude Code também sincroniza ao encerrar a sessão via hook `Stop` em `.claude
 
 ### Revisão obrigatória ao final de cada sessão
 
-1. **`/security-review`** — verificar JWT, armazenamento de chaves AES, validação on-chain
-2. **`/review`** — coerência entre frontend, servidor e contrato
+**Regra de segurança: após qualquer alteração no projeto, o agente de segurança é responsável por verificar todo o sistema antes do commit.**
+
+1. **`/security-review`** — verificar JWT, armazenamento de chaves AES, validação on-chain, rotas proxy DRM
+2. **`/review`** — coerência entre frontend, servidor, DRM API e contrato
 3. Checklist:
    - [ ] `.env` não aparece no `git status`
    - [ ] `storage/` não aparece no `git status`
-   - [ ] `js/api.js` aponta para a URL correta
+   - [ ] `js/api.js` aponta para as URLs corretas (API_BASE e DRM_API_BASE)
+   - [ ] Rotas proxy `/api/drm/*` respondem corretamente
+   - [ ] DRM API (`DRM_API_URL`) está acessível pelo servidor
    - [ ] Contrato compila sem warnings (`npx hardhat compile`)
 4. Commit e push — o hook de post-commit empurra automaticamente
 

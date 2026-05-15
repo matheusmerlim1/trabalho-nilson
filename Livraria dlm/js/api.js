@@ -264,5 +264,109 @@ const APIPublisher = {
   },
 };
 
+// ══════════════════════════════════════════════════════════════
+//  DRM API — métodos de criptografia centralizados (DLM PDF API)
+//  A URL da DRM API é configurada separadamente de API_BASE.
+//  Esses métodos NÃO dependem de JWT — usam publicKey + assinatura MetaMask.
+// ══════════════════════════════════════════════════════════════
+const DRM_API_BASE = window.DLM_DRM_API_BASE || 'https://dlm-pdf-server-production.up.railway.app/api/v1';
+
+async function drmFetch(path, options = {}) {
+  const headers = { 'Content-Type': 'application/json', ...options.headers };
+  const res = await fetch(DRM_API_BASE + path, { ...options, headers });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `Erro HTTP ${res.status}`);
+  return data;
+}
+
+const APIDLM = {
+  /**
+   * Registra usuário (endereço → nome + CPF) na DRM API.
+   */
+  async registerUser(address, name, cpf) {
+    return drmFetch('/users/register', {
+      method: 'POST',
+      body: JSON.stringify({ address, name, cpf }),
+    });
+  },
+
+  /**
+   * Consulta nome e CPF de um endereço Ethereum.
+   */
+  async lookupUser(address) {
+    return drmFetch(`/users/${encodeURIComponent(address)}`);
+  },
+
+  /**
+   * Encripta um PDF e registra a titularidade.
+   * @param {string} pdfBase64
+   * @param {string} publicKey    — endereço Ethereum do titular
+   * @param {string} userName
+   * @param {string} userCPF
+   * @param {string} [licenseId] — gerado automaticamente se omitido
+   * @returns {{ dlmBase64, licenseId, contentHash, owner }}
+   */
+  async encrypt(pdfBase64, publicKey, userName, userCPF, licenseId = null) {
+    return drmFetch('/encrypt', {
+      method: 'POST',
+      body: JSON.stringify({ pdfBase64, publicKey, userName, userCPF, licenseId }),
+    });
+  },
+
+  /**
+   * Descriptografa um .dlm v3 usando cadeia de custódia.
+   * Requer assinatura MetaMask para provar posse da carteira.
+   *
+   * Como gerar a assinatura no frontend (MetaMask):
+   *   const message = `DLM:decrypt:${licenseId}:${Date.now()}`;
+   *   const signature = await ethereum.request({
+   *     method: 'personal_sign',
+   *     params: [message, publicKey],
+   *   });
+   *
+   * @param {string} dlmBase64
+   * @param {string} publicKey   — endereço Ethereum do dono atual
+   * @param {string} signature   — assinatura MetaMask
+   * @param {string} message     — mensagem assinada (termina em ":millis")
+   * @returns {{ pdfBase64, dlmBase64 (atualizado), licenseId, owner }}
+   */
+  async decrypt(dlmBase64, publicKey, signature, message) {
+    return drmFetch('/decrypt', {
+      method: 'POST',
+      body: JSON.stringify({ dlmBase64, publicKey, signature, message }),
+    });
+  },
+
+  /**
+   * Consulta nome e CPF do destinatário antes da transferência.
+   * @returns {{ newOwner: { address, name, cpf }, currentOwner, licenseId }}
+   */
+  async previewTransfer(toPublicKey, licenseId) {
+    return drmFetch('/transfer/preview', {
+      method: 'POST',
+      body: JSON.stringify({ toPublicKey, licenseId }),
+    });
+  },
+
+  /**
+   * Executa transferência de posse. Requer assinatura MetaMask do cedente.
+   *
+   * Como gerar a assinatura:
+   *   const message = `DLM:transfer:${licenseId}:${Date.now()}`;
+   *   const signature = await ethereum.request({
+   *     method: 'personal_sign',
+   *     params: [message, fromPublicKey],
+   *   });
+   *
+   * @returns {{ licenseId, previousOwner, newOwner, transferredAt }}
+   */
+  async transfer(fromPublicKey, toPublicKey, licenseId, signature, message) {
+    return drmFetch('/transfer', {
+      method: 'POST',
+      body: JSON.stringify({ fromPublicKey, toPublicKey, licenseId, signature, message }),
+    });
+  },
+};
+
 // ── Exporta para uso global ───────────────────────────────────────────────────
-window.DLM = { Auth, APIAuth, APIBooks, APILicenses, APIPublisher };
+window.DLM = { Auth, APIAuth, APIBooks, APILicenses, APIPublisher, APIDLM };

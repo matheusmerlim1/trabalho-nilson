@@ -437,10 +437,122 @@ app.get("/api/books/integrity/:bookId", verifyApiKey, (req, res) => {
   res.json({ success: true, bookId, intact: current === meta.hashEncrypted, storedHash: meta.hashEncrypted, actualHash: current });
 });
 
+// ═══════════════════════════════════════════════════════════════════════════════
+//  PROXY DRM → DLM PDF API (centraliza criptografia v3)
+//
+//  A URL da DLM PDF API é configurada em DRM_API_URL no .env.
+//  Padrão: http://localhost:3000/api/v1
+//
+//  Rotas disponíveis:
+//    POST /api/drm/encrypt                — encripta PDF + registra titular
+//    POST /api/drm/decrypt                — decifra com cadeia de custódia
+//    POST /api/drm/transfer/preview       — consulta dados do destinatário
+//    POST /api/drm/transfer               — transfere posse (+ NFT on-chain)
+//    POST /api/drm/users/register         — cadastra endereço → nome + CPF
+//    GET  /api/drm/users/:address         — consulta usuário por endereço
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const DRM_API = process.env.DRM_API_URL || "http://localhost:3000/api/v1";
+
+/** Proxy genérico para a DLM PDF API */
+async function drmProxy(method, path, body = null) {
+  const opts = {
+    method,
+    headers: { "Content-Type": "application/json" },
+  };
+  if (body) opts.body = JSON.stringify(body);
+  const res  = await fetch(`${DRM_API}${path}`, opts);
+  const data = await res.json().catch(() => ({}));
+  return { status: res.status, data };
+}
+
+// POST /api/drm/users/register — cadastra endereço → nome + CPF
+app.post("/api/drm/users/register", async (req, res) => {
+  try {
+    const { status, data } = await drmProxy("POST", "/users/register", req.body);
+    res.status(status).json(data);
+  } catch (err) { res.status(502).json({ success: false, message: `DRM API indisponível: ${err.message}` }); }
+});
+
+// GET /api/drm/users/:address — consulta usuário por endereço
+app.get("/api/drm/users/:address", async (req, res) => {
+  try {
+    const { status, data } = await drmProxy("GET", `/users/${encodeURIComponent(req.params.address)}`);
+    res.status(status).json(data);
+  } catch (err) { res.status(502).json({ success: false, message: `DRM API indisponível: ${err.message}` }); }
+});
+
+// POST /api/drm/encrypt — encripta PDF via DLM PDF API (formato v3)
+app.post("/api/drm/encrypt", verifyToken, upload.single("pdf"), async (req, res) => {
+  try {
+    const { publicKey, userName, userCPF, licenseId } = req.body;
+    if (!req.file) return res.status(400).json({ success: false, message: "PDF obrigatório" });
+    if (!publicKey || !userName || !userCPF)
+      return res.status(400).json({ success: false, message: "publicKey, userName e userCPF são obrigatórios" });
+
+    const pdfBase64 = req.file.buffer.toString("base64");
+    const { status, data } = await drmProxy("POST", "/encrypt", {
+      pdfBase64, publicKey, userName, userCPF, licenseId: licenseId || null,
+    });
+    res.status(status).json(data);
+  } catch (err) { res.status(502).json({ success: false, message: `DRM API indisponível: ${err.message}` }); }
+});
+
+// POST /api/drm/decrypt — decifra .dlm via DLM PDF API (cadeia de custódia)
+app.post("/api/drm/decrypt", verifyToken, async (req, res) => {
+  try {
+    const { status, data } = await drmProxy("POST", "/decrypt", req.body);
+    res.status(status).json(data);
+  } catch (err) { res.status(502).json({ success: false, message: `DRM API indisponível: ${err.message}` }); }
+});
+
+// POST /api/drm/transfer/preview — consulta nome+CPF do destinatário
+app.post("/api/drm/transfer/preview", verifyToken, async (req, res) => {
+  try {
+    const { status, data } = await drmProxy("POST", "/transfer/preview", req.body);
+    res.status(status).json(data);
+  } catch (err) { res.status(502).json({ success: false, message: `DRM API indisponível: ${err.message}` }); }
+});
+
+// POST /api/drm/transfer — transfere posse no DRM + NFT na blockchain
+app.post("/api/drm/transfer", verifyToken, async (req, res) => {
+  try {
+    const { fromPublicKey, toPublicKey, licenseId, tokenId, signature, message } = req.body;
+    if (!fromPublicKey || !toPublicKey || !licenseId || !signature || !message)
+      return res.status(400).json({ success: false, message: "fromPublicKey, toPublicKey, licenseId, signature e message são obrigatórios" });
+
+    // 1. Transfere posse no registro DRM
+    const { status: drmStatus, data: drmData } = await drmProxy("POST", "/transfer", {
+      fromPublicKey, toPublicKey, licenseId, signature, message,
+    });
+    if (drmStatus !== 200) return res.status(drmStatus).json(drmData);
+
+    // 2. Se tokenId fornecido, transfere NFT na blockchain também
+    let txHash = null;
+    if (tokenId) {
+      try {
+        const tx  = await contract.transferToUser(tokenId, toPublicKey);
+        const rec = await tx.wait();
+        txHash    = rec.hash;
+      } catch (chainErr) {
+        // DRM já foi transferido — informa mas não reverte (rollback manual necessário)
+        return res.status(207).json({
+          success: false,
+          message: `Posse DRM transferida, mas falha na blockchain: ${chainErr.message}`,
+          drmResult: drmData,
+        });
+      }
+    }
+
+    res.json({ success: true, drmResult: drmData, blockchainTxHash: txHash });
+  } catch (err) { res.status(502).json({ success: false, message: `DRM API indisponível: ${err.message}` }); }
+});
+
 // ── Start ─────────────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
   console.log(`\n🚀 DLM API → http://localhost:${PORT}`);
   console.log(`📖 Contrato : ${process.env.CONTRACT_ADDRESS}`);
-  console.log(`🔐 AES-256-CBC | Chaves em: ${KEYS_DIR}\n`);
+  console.log(`🔐 DRM API  : ${DRM_API}`);
+  console.log(`🔑 AES-256-CBC local | Chaves em: ${KEYS_DIR}\n`);
 });
