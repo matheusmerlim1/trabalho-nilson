@@ -74,7 +74,14 @@ const APIBooks = {
 
   getAll() {
     const stored = localStorage.getItem(this._storageKey);
-    return stored ? JSON.parse(stored) : this._defaultBooks();
+    if (!stored) return [];
+    const books = JSON.parse(stored);
+    // Remove livros hardcoded antigos (IDs 1-6); livros reais usam Date.now() como ID
+    const cleaned = books.filter(b => Number(b.id) > 6);
+    if (cleaned.length !== books.length) {
+      localStorage.setItem(this._storageKey, JSON.stringify(cleaned));
+    }
+    return cleaned;
   },
 
   getById(id) {

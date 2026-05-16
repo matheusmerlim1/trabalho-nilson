@@ -51,7 +51,12 @@ function makeAPIBooks(ls) {
   return {
     getAll() {
       const stored = ls.getItem(KEY);
-      return stored ? JSON.parse(stored) : [];
+      if (!stored) return [];
+      const books = JSON.parse(stored);
+      // Remove livros hardcoded antigos (IDs 1-6); livros reais usam Date.now() como ID
+      const cleaned = books.filter(b => Number(b.id) > 6);
+      if (cleaned.length !== books.length) ls.setItem(KEY, JSON.stringify(cleaned));
+      return cleaned;
     },
     getById(id) {
       return this.getAll().find(b => String(b.id) === String(id)) || null;
@@ -181,6 +186,20 @@ describe('APIBooks.getById após addLicense (integração local)', () => {
 
   test('sem livros publicados, getAll retorna array vazio', () => {
     expect(apiBooks.getAll()).toEqual([]);
+  });
+
+  test('migração: livros com IDs 1-6 (antigos defaults) são removidos do localStorage', () => {
+    const KEY = 'dlm_books_catalog';
+    const legacyBooks = [
+      { id: 1, title: 'O Senhor dos Anéis', author: 'Tolkien', price: 39.9 },
+      { id: 2, title: 'Duna', author: 'Herbert', price: 34.9 },
+      { id: 1716000000000, title: 'Livro Real', author: 'Autor', price: 20 },
+    ];
+    ls.setItem(KEY, JSON.stringify(legacyBooks));
+
+    const result = apiBooks.getAll();
+    expect(result).toHaveLength(1);
+    expect(result[0].title).toBe('Livro Real');
   });
 });
 
