@@ -24,12 +24,47 @@ cp .env.example .env
 # Preencher: RPC_URL, ADMIN_PRIVATE_KEY, CONTRACT_ADDRESS, DLM_API_KEY, JWT_SECRET
 ```
 
-## Arquitetura
+## Arquitetura dos 3 Projetos
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  DLM PDF API  (trabalho de Nilson segurança/DLM PDF API)        │
+│  GitHub: matheusmerlim1/DLM-PDF-API                             │
+│  Papel: API REST + smart contract. Todos os métodos de          │
+│         criptografia, licenças e custódia blockchain.           │
+│  Site: documentação e demo do servidor                          │
+└────────────────────────┬────────────────────────────────────────┘
+                         │ HTTP (APIDLM.*)
+          ┌──────────────┴──────────────┐
+          ▼                             ▼
+┌─────────────────────┐   ┌──────────────────────────────────────┐
+│   Livraria DLM      │   │   DLM-PDF Encriptador                │
+│   (este projeto)    │   │   (DML-PDF plataform)                │
+│   GitHub: trabalho- │   │   GitHub: matheusmerlim1/            │
+│   nilson            │   │          DLM-PDF-encriptador         │
+│                     │   │   GitHub Pages: encriptador          │
+│   Papel: loja de    │   │                                      │
+│   e-books. Editora  │   │   Papel: APENAS descriptografar      │
+│   criptografa PDFs  │   │   arquivos .dlm. Leitor puro —       │
+│   via APIDLM.       │   │   sem geração de .dlm.               │
+│   encrypt(). Leitor │   │                                      │
+│   transfere posse   │   │   Requer MetaMask (sem demo mode).   │
+│   via APIDLM.       │   │   Chama POST /decrypt na API.        │
+│   transfer().       │   └──────────────────────────────────────┘
+└─────────────────────┘
+```
+
+### Regra de ouro entre os projetos
+- **Toda lógica de criptografia** fica exclusivamente na DLM PDF API
+- **Livraria DLM** e **DLM-PDF Encriptador** apenas consomem os métodos da API via `APIDLM.*`
+- Nunca implementar crypto, geração de chaves ou parsing de `.dlm` nos projetos clientes
+
+## Arquitetura interna da Livraria DLM
 
 ```
 Browser (index.html + pages/)
     ↕ fetch / localStorage (modo demo)
-js/api.js  →  DLM PDF API  (http://localhost:3000/api/v1)
+js/api.js  →  DLM PDF API  (https://dlm-pdf-server-production.up.railway.app/api/v1)
                ↕ ethers.js
            Smart Contract DLMBookstore.sol (ERC-721, Sepolia / local)
 ```
