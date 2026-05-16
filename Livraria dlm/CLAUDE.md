@@ -209,6 +209,33 @@ grep -n "APIDLM.busca\|APIDLM.previewTransfer\|APIDLM.transfer" pages/biblioteca
 
 **Regra:** ao incrementar qualquer versão de script ou formato, atualizar o sufixo `?v=N` em **todos** os arquivos HTML do projeto de uma vez. Nunca deixar páginas com versões diferentes entre si.
 
+## Regra de Testes
+
+**Antes de qualquer commit, todos os testes dos 3 projetos devem passar.**
+
+### Comandos para rodar os testes
+
+```bash
+# Livraria DLM (este projeto)
+cd "trabalho de Nilson segurança/Livraria dlm"
+npm test
+
+# DML-PDF Plataform
+cd "DML-PDF plataform"
+npm test
+
+# DLM PDF API (servidor)
+cd "trabalho de Nilson segurança/DLM PDF API/server"
+npm test
+```
+
+### Regra obrigatória de correção
+
+**Se qualquer teste falhar e uma correção for feita:**
+1. Todos os testes dos **3 projetos** devem ser reexecutados do zero.
+2. O commit só pode ser realizado se **100% dos testes passarem** em todos os projetos.
+3. Nunca commitar com testes falhando, mesmo que a falha pareça não relacionada à alteração feita.
+
 ## Regra de Commit
 
 **Sempre que houver qualquer alteração no projeto, realizar o commit imediatamente após a mudança.**
