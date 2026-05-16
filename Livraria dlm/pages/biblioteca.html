@@ -280,7 +280,16 @@ async function previewTransfer() {
     document.getElementById('transfer-step-1').style.display = 'none';
     document.getElementById('transfer-step-2').style.display = 'block';
   } catch (err) {
-    toast('Erro ao verificar destinatário: ' + err.message, 'err');
+    // API indisponível — avança em modo demo sem verificar nome
+    _transfer.toAddress = toAddr;
+    document.getElementById('tbk-title-2').textContent  = _transfer.title;
+    document.getElementById('tbk-author-2').textContent = _transfer.author;
+    document.getElementById('tbk-id-2').textContent     = `Licença #${_transfer.licenseId}`;
+    document.getElementById('rc-name').textContent      = '(não verificado — modo demo)';
+    document.getElementById('rc-addr').textContent      = toAddr;
+    document.getElementById('transfer-step-1').style.display = 'none';
+    document.getElementById('transfer-step-2').style.display = 'block';
+    toast('API indisponível — prosseguindo em modo demo.', 'info');
   } finally {
     btn.disabled    = false;
     btn.textContent = 'Verificar destinatário →';
@@ -312,9 +321,14 @@ async function doTransfer() {
 
     await APIDLM.transfer(fromKey, toKey, licenseId, signature, message);
 
+    // Remove da biblioteca local
+    const current = JSON.parse(localStorage.getItem('dlm_my_licenses') || '[]');
+    localStorage.setItem('dlm_my_licenses', JSON.stringify(current.filter(l => String(l.licenseId) !== String(licenseId))));
+
     document.getElementById('transfer-after').style.display = 'block';
     btn.textContent = '✅ Transferido';
-    toast('Transferência concluída com sucesso.', 'ok', 5000);
+    toast('Transferência concluída com sucesso.', 'ok', 3000);
+    setTimeout(() => { closeTransferModal(); location.reload(); }, 3000);
   } catch (err) {
     toast('Erro: ' + err.message, 'err');
     btn.disabled    = false;

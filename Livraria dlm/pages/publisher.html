@@ -135,7 +135,7 @@
 <script src="../js/api.js?v=4"></script>
 <script src="../js/app.js?v=4"></script>
 <script>
-const { Auth, APIBooks, APIPublisher, APIDLM } = window.DLM;
+const { Auth, APIBooks, APILicenses, APIPublisher, APIDLM } = window.DLM;
 
 let pdfBuffer = null;
 let dlmBuffer = null;
@@ -148,6 +148,9 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('pub-content').style.display = 'block';
   renderMyBooks();
   setupDrop();
+
+  const savedName = localStorage.getItem('dlm_user_name');
+  if (savedName) document.getElementById('p-pub-name').value = savedName;
 });
 
 function setupDrop() {
@@ -232,6 +235,9 @@ async function publishBook() {
     // Registra o livro localmente (demo) + na blockchain
     const book = APIBooks.add({ title, author, description:desc, price, genre, emoji, royaltyBps: royalty*100, color: null });
     await APIPublisher.registerBook(title, author, hashHex, royalty*100);
+
+    // Adiciona à biblioteca do publisher automaticamente
+    APILicenses.addLicense(book.id, licenseId);
 
     prog.style.width = '100%';
 

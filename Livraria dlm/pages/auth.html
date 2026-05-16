@@ -46,6 +46,14 @@
     .info-row { display:flex; align-items:flex-start; gap:8px; margin-bottom:7px; font-size:.76rem; color:var(--muted); line-height:1.5; }
     .info-row:last-child { margin-bottom:0; }
     .demo-notice { background:rgba(180,83,9,.07); border:1px solid rgba(180,83,9,.25); border-radius:8px; padding:10px 12px; font-size:.74rem; color:var(--gold); margin-bottom:1rem; line-height:1.55; }
+    .name-modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,.65); display:flex; align-items:center; justify-content:center; z-index:2000; }
+    .name-modal-box { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:1.75rem; max-width:420px; width:90%; }
+    .name-modal-box h3 { font-family:var(--serif); margin-bottom:.5rem; }
+    .name-modal-box p { font-size:.82rem; color:var(--muted); margin-bottom:1.25rem; line-height:1.6; }
+    .name-modal-input { width:100%; background:var(--surface2); border:1px solid var(--border); border-radius:6px; padding:.55rem .75rem; font-size:.88rem; color:var(--ink); box-sizing:border-box; margin-bottom:.75rem; outline:none; }
+    .name-modal-input:focus { border-color:var(--accent); }
+    .name-modal-actions { display:flex; gap:.6rem; }
+    .name-modal-actions .btn { flex:1; }
   </style>
 </head>
 <body>
@@ -130,11 +138,24 @@
   </div>
 </div>
 
+<!-- Modal de nome de usuário -->
+<div id="name-modal" class="name-modal-overlay" style="display:none" aria-modal="true" role="dialog">
+  <div class="name-modal-box">
+    <h3>👤 Seu nome na plataforma</h3>
+    <p>Para transferir livros, você precisa ter um nome cadastrado. Esse nome será exibido quando alguém receber uma transferência sua.</p>
+    <input type="text" id="name-input" class="name-modal-input" placeholder="Ex: João Silva" maxlength="60"/>
+    <div class="name-modal-actions">
+      <button class="btn btn-primary" id="btn-name-confirm">Confirmar</button>
+      <button class="btn btn-ghost" id="btn-name-cancel">Cancelar</button>
+    </div>
+  </div>
+</div>
+
 <div id="toast-container"></div>
 <script src="../js/api.js?v=4"></script>
 <script src="../js/app.js?v=4"></script>
 <script>
-const { Auth, APIAuth } = window.DLM;
+const { Auth, APIDLM } = window.DLM;
 
 function switchTab(name) {
   document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('active',(i===0&&name==='login')||(i===1&&name==='register')));
@@ -158,71 +179,192 @@ function fakeJWT(addr){
   return `${h}.${p}.${s}`;
 }
 
+function showNameModal() {
+  return new Promise((resolve, reject) => {
+    const modal = document.getElementById('name-modal');
+    const input = document.getElementById('name-input');
+    input.value = '';
+    modal.style.display = 'flex';
+    setTimeout(() => input.focus(), 50);
+
+    document.getElementById('btn-name-confirm').onclick = () => {
+      const name = input.value.trim();
+      if (name.length < 3) { toast('Nome deve ter pelo menos 3 caracteres.', 'err'); return; }
+      modal.style.display = 'none';
+      resolve(name);
+    };
+    document.getElementById('btn-name-cancel').onclick = () => {
+      modal.style.display = 'none';
+      reject(new Error('Nome é obrigatório para usar a plataforma.'));
+    };
+    input.onkeydown = e => { if (e.key === 'Enter') document.getElementById('btn-name-confirm').click(); };
+  });
+}
+
+async function ensureUserName(addr) {
+  let name = localStorage.getItem('dlm_user_name');
+  if (name) return name;
+
+  try {
+    const user = await APIDLM.lookupUser(addr);
+    if (user && user.name) {
+      localStorage.setItem('dlm_user_name', user.name);
+      return user.name;
+    }
+  } catch { /* API unavailable */ }
+
+  name = await showNameModal();
+
+  try { await APIDLM.registerUser(addr, name, ''); } catch { /* API unavailable */ }
+  localStorage.setItem('dlm_user_name', name);
+  return name;
+}
+
 async function doLogin() {
-  const btn=document.getElementById('btn-login');
-  btn.disabled=true; btn.innerHTML='<span class="spin"></span> Conectando...';
-  setStep('ls1','s-active','Solicitando acesso à carteira...');
-  await delay(900);
-  const addr=fakeAddr();
-  setStep('ls1','s-done',addr.slice(0,10)+'...'+addr.slice(-6)+' conectado');
-  document.getElementById('l-wallet').classList.add('show');
-  document.getElementById('l-addr').textContent=addr;
-  setStep('ls2','s-active','Aguardando assinatura...');
-  btn.innerHTML='<span class="spin"></span> Aguardando assinatura...';
-  await delay(1200);
-  setStep('ls2','s-done','Assinatura verificada');
-  setStep('ls3','s-active','Gerando token JWT...');
-  btn.innerHTML='<span class="spin"></span> Gerando token...';
-  await delay(700);
-  const token=fakeJWT(addr);
-  setStep('ls3','s-done','Token válido por 1 hora');
-  document.getElementById('l-token').classList.add('show');
-  document.getElementById('l-token-val').textContent=token;
-  Auth.save(token, addr);
-  btn.className='btn btn-success btn-full'; btn.innerHTML='✅ Autenticado com sucesso';
-  toast('Login realizado com sucesso!','ok');
+  const btn = document.getElementById('btn-login');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spin"></span> Conectando...';
+  setStep('ls1', 's-active', 'Solicitando acesso à carteira...');
+
+  try {
+    let addr;
+    if (window.ethereum) {
+      const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+      addr = accounts[0];
+    } else {
+      addr = fakeAddr();
+      toast('MetaMask não detectado — modo demonstração', 'info');
+    }
+
+    setStep('ls1', 's-done', addr.slice(0,10)+'...'+addr.slice(-6)+' conectado');
+    document.getElementById('l-wallet').classList.add('show');
+    document.getElementById('l-addr').textContent = addr;
+
+    setStep('ls2', 's-active', 'Verificando cadastro...');
+    btn.innerHTML = '<span class="spin"></span> Verificando...';
+
+    if (window.ethereum) {
+      await ensureUserName(addr);
+    }
+
+    setStep('ls2', 's-active', 'Aguardando assinatura...');
+    btn.innerHTML = '<span class="spin"></span> Aguardando assinatura...';
+
+    if (window.ethereum) {
+      const message = `DLM:login:${addr}:${Date.now()}`;
+      await window.ethereum.request({ method: 'personal_sign', params: [message, addr] });
+    } else {
+      await delay(1200);
+    }
+
+    setStep('ls2', 's-done', 'Assinatura verificada');
+    setStep('ls3', 's-active', 'Gerando token JWT...');
+    btn.innerHTML = '<span class="spin"></span> Gerando token...';
+    await delay(400);
+
+    const token = fakeJWT(addr);
+    setStep('ls3', 's-done', 'Token válido por 1 hora');
+    document.getElementById('l-token').classList.add('show');
+    document.getElementById('l-token-val').textContent = token;
+    Auth.save(token, addr);
+    btn.className = 'btn btn-success btn-full';
+    btn.innerHTML = '✅ Autenticado com sucesso';
+    toast('Login realizado com sucesso!', 'ok');
+
+  } catch (err) {
+    setStep('ls1', 's-error', err.message);
+    btn.disabled = false;
+    btn.innerHTML = '🦊 Conectar e autenticar';
+    toast('Erro: ' + err.message, 'err');
+  }
 }
 
 async function doRegister() {
-  const btn=document.getElementById('btn-register');
-  btn.disabled=true; btn.innerHTML='<span class="spin"></span> Conectando...';
-  setStep('rs1','s-active','Detectando carteira...');
-  await delay(800);
-  const addr=fakeAddr();
-  setStep('rs1','s-done',addr.slice(0,10)+'...'+addr.slice(-6)+' detectado');
-  document.getElementById('r-wallet').classList.add('show');
-  document.getElementById('r-addr').textContent=addr;
-  setStep('rs2','s-active','Verificando endereço...');
-  btn.innerHTML='<span class="spin"></span> Verificando...';
-  await delay(900);
-  setStep('rs2','s-done','Endereço disponível');
-  setStep('rs3','s-active','Aguardando assinatura...');
-  btn.innerHTML='<span class="spin"></span> Aguardando assinatura...';
-  await delay(1300);
-  setStep('rs3','s-done','Conta registrada');
-  setStep('rs4','s-active','Gerando token...');
-  btn.innerHTML='<span class="spin"></span> Finalizando...';
-  await delay(600);
-  const token=fakeJWT(addr);
-  setStep('rs4','s-done','Bem-vindo ao LivrosDLM!');
-  document.getElementById('r-token').classList.add('show');
-  document.getElementById('r-token-val').textContent=token;
-  Auth.save(token, addr);
-  btn.className='btn btn-success btn-full'; btn.innerHTML='✅ Conta criada com sucesso';
-  toast('Conta criada com sucesso!','ok');
+  const btn = document.getElementById('btn-register');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spin"></span> Conectando...';
+  setStep('rs1', 's-active', 'Detectando carteira...');
+
+  try {
+    let addr;
+    if (window.ethereum) {
+      const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+      addr = accounts[0];
+    } else {
+      addr = fakeAddr();
+      toast('MetaMask não detectado — modo demonstração', 'info');
+    }
+
+    setStep('rs1', 's-done', addr.slice(0,10)+'...'+addr.slice(-6)+' detectado');
+    document.getElementById('r-wallet').classList.add('show');
+    document.getElementById('r-addr').textContent = addr;
+
+    setStep('rs2', 's-active', 'Verificando endereço...');
+    btn.innerHTML = '<span class="spin"></span> Verificando...';
+
+    let alreadyRegistered = false;
+    if (window.ethereum) {
+      try {
+        const user = await APIDLM.lookupUser(addr);
+        if (user && user.name) {
+          alreadyRegistered = true;
+          localStorage.setItem('dlm_user_name', user.name);
+        }
+      } catch { /* API unavailable */ }
+    }
+
+    setStep('rs2', 's-done', alreadyRegistered ? 'Endereço já registrado' : 'Endereço disponível');
+    setStep('rs3', 's-active', 'Aguardando assinatura e cadastro...');
+    btn.innerHTML = '<span class="spin"></span> Aguardando...';
+
+    if (!alreadyRegistered) {
+      const name = await showNameModal();
+      if (window.ethereum) {
+        try { await APIDLM.registerUser(addr, name, ''); } catch { /* API unavailable */ }
+      }
+      localStorage.setItem('dlm_user_name', name);
+    }
+
+    if (window.ethereum) {
+      const message = `DLM:register:${addr}:${Date.now()}`;
+      await window.ethereum.request({ method: 'personal_sign', params: [message, addr] });
+    } else {
+      await delay(1300);
+    }
+
+    setStep('rs3', 's-done', 'Conta registrada');
+    setStep('rs4', 's-active', 'Gerando token...');
+    btn.innerHTML = '<span class="spin"></span> Finalizando...';
+    await delay(400);
+
+    const token = fakeJWT(addr);
+    setStep('rs4', 's-done', 'Bem-vindo ao LivrosDLM!');
+    document.getElementById('r-token').classList.add('show');
+    document.getElementById('r-token-val').textContent = token;
+    Auth.save(token, addr);
+    btn.className = 'btn btn-success btn-full';
+    btn.innerHTML = '✅ Conta criada com sucesso';
+    toast('Conta criada com sucesso!', 'ok');
+
+  } catch (err) {
+    setStep('rs1', 's-error', err.message);
+    btn.disabled = false;
+    btn.innerHTML = '🦊 Conectar e criar conta';
+    toast('Erro: ' + err.message, 'err');
+  }
 }
 
 async function copyTok(valId, btnId) {
-  const val=document.getElementById(valId).textContent;
-  const btn=document.getElementById(btnId);
+  const val = document.getElementById(valId).textContent;
+  const btn = document.getElementById(btnId);
   await navigator.clipboard.writeText(val).catch(()=>{});
-  btn.textContent='✅ Copiado!';
-  setTimeout(()=>btn.innerHTML='📋 Copiar',2000);
+  btn.textContent = '✅ Copiado!';
+  setTimeout(() => btn.innerHTML = '📋 Copiar', 2000);
 }
 
-function goHome(){ setTimeout(()=>window.location.href='../index.html', 500); }
+function goHome() { setTimeout(() => window.location.href = '../index.html', 500); }
 
-if(Auth.isLoggedIn()) {
+if (Auth.isLoggedIn()) {
   document.querySelectorAll('.demo-notice').forEach(el=>el.innerHTML='✅ Você já está autenticado. <a href="../index.html">Voltar à loja →</a>');
 }
 </script>
