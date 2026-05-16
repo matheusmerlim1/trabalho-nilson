@@ -48,14 +48,10 @@ function makeAPILicenses(ls) {
 
 function makeAPIBooks(ls) {
   const KEY = 'dlm_books_catalog';
-  const defaults = [
-    { id: 1, title: 'Livro A', author: 'Autor A', price: 10 },
-    { id: 2, title: 'Livro B', author: 'Autor B', price: 20 },
-  ];
   return {
     getAll() {
       const stored = ls.getItem(KEY);
-      return stored ? JSON.parse(stored) : defaults;
+      return stored ? JSON.parse(stored) : [];
     },
     getById(id) {
       return this.getAll().find(b => String(b.id) === String(id)) || null;
@@ -178,10 +174,13 @@ describe('APIBooks.getById após addLicense (integração local)', () => {
     expect(found.title).toBe('Livro Licenciado');
   });
 
-  test('livros padrão (sem publicação) ainda aparecem via getById', () => {
-    expect(apiBooks.getById(1)).not.toBeNull();
-    expect(apiBooks.getById(2)).not.toBeNull();
+  test('sem livros publicados, getById retorna null para qualquer id', () => {
+    expect(apiBooks.getById(1)).toBeNull();
     expect(apiBooks.getById(999)).toBeNull();
+  });
+
+  test('sem livros publicados, getAll retorna array vazio', () => {
+    expect(apiBooks.getAll()).toEqual([]);
   });
 });
 
@@ -251,5 +250,104 @@ describe('runPublishBook — addLicense sempre executado', () => {
     expect(found).toHaveLength(1);
     expect(found[0].title).toBe('Meu Livro');
     expect(found[0].id).toBe(book.id);
+  });
+});
+
+// ── Lógica de carregamento blockchain-first (biblioteca.html) ─────────────────
+
+/**
+ * Simula loadLibrary(): tenta busca() na API; se falhar, usa localStorage.
+ * Mescla dados da chain com metadados locais (emoji, color).
+ */
+async function runLoadLibrary({ buscaFn, apiBooks, apiLicenses }) {
+  const COLORS = ['#1e3a5f','#78350f','#3b0764'];
+
+  try {
+    const result     = await buscaFn();
+    const chainBooks = result.books || [];
+    const localLics  = apiLicenses.getMyLicenses();
+
+    return chainBooks.map(cb => {
+      const localLic  = localLics.find(l => String(l.licenseId) === String(cb.licenseId));
+      const localBook = localLic ? apiBooks.getById(localLic.bookId) : null;
+      return {
+        licenseId: String(cb.licenseId),
+        title:     cb.title  || localBook?.title  || 'Sem título',
+        author:    cb.author || localBook?.author || '',
+        emoji:     localBook?.emoji || '📚',
+        fromChain: true,
+      };
+    });
+  } catch {
+    // Fallback: localStorage
+    const localLics = apiLicenses.getMyLicenses();
+    return localLics.map(lic => {
+      const book = apiBooks.getById(lic.bookId);
+      if (!book) return null;
+      return { licenseId: String(lic.licenseId), title: book.title, author: book.author, emoji: book.emoji || '📚', fromChain: false };
+    }).filter(Boolean);
+  }
+}
+
+describe('loadLibrary — blockchain-first com fallback localStorage', () => {
+  let ls, apiBooks, apiLicenses;
+
+  beforeEach(() => {
+    ls          = makeLocalStorage();
+    apiBooks    = makeAPIBooks(ls);
+    apiLicenses = makeAPILicenses(ls);
+  });
+
+  test('retorna livros da chain quando busca() resolve', async () => {
+    const buscaFn = jest.fn().mockResolvedValue({
+      books: [
+        { licenseId: 'abc', title: 'Livro Chain', author: 'Autor Chain' },
+      ],
+    });
+
+    const result = await runLoadLibrary({ buscaFn, apiBooks, apiLicenses });
+    expect(result).toHaveLength(1);
+    expect(result[0].title).toBe('Livro Chain');
+    expect(result[0].fromChain).toBe(true);
+  });
+
+  test('mescla metadados locais (emoji) com dados da chain', async () => {
+    const book = apiBooks.add({ title: 'Livro Local', author: 'Autor', emoji: '🔥', price: 10 });
+    apiLicenses.addLicense(book.id, 'xyz');
+
+    const buscaFn = jest.fn().mockResolvedValue({
+      books: [{ licenseId: 'xyz', title: 'Livro Local', author: 'Autor' }],
+    });
+
+    const result = await runLoadLibrary({ buscaFn, apiBooks, apiLicenses });
+    expect(result[0].emoji).toBe('🔥');
+  });
+
+  test('livro transferido some da lista quando chain retorna vazio', async () => {
+    const buscaFn = jest.fn().mockResolvedValue({ books: [] });
+    const result  = await runLoadLibrary({ buscaFn, apiBooks, apiLicenses });
+    expect(result).toHaveLength(0);
+  });
+
+  test('usa localStorage como fallback quando busca() falha', async () => {
+    const book = apiBooks.add({ title: 'Fallback Livro', author: 'Autor', price: 5 });
+    apiLicenses.addLicense(book.id, '999');
+
+    const buscaFn = jest.fn().mockRejectedValue(new Error('API fora'));
+    const result  = await runLoadLibrary({ buscaFn, apiBooks, apiLicenses });
+
+    expect(result).toHaveLength(1);
+    expect(result[0].title).toBe('Fallback Livro');
+    expect(result[0].fromChain).toBe(false);
+  });
+
+  test('fallback retorna vazio quando localStorage e chain estão vazios', async () => {
+    const buscaFn = jest.fn().mockRejectedValue(new Error('API fora'));
+    const result  = await runLoadLibrary({ buscaFn, apiBooks, apiLicenses });
+    expect(result).toHaveLength(0);
+  });
+
+  test('catálogo sem livros publicados retorna array vazio', () => {
+    expect(apiBooks.getAll()).toEqual([]);
   });
 });

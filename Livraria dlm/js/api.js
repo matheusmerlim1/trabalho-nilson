@@ -95,44 +95,7 @@ const APIBooks = {
   },
 
   _defaultBooks() {
-    return [
-      {
-        id: 1, title: 'O Senhor dos Anéis', author: 'J.R.R. Tolkien',
-        description: 'A épica jornada de Frodo e a Irmandade do Anel para destruir o Um Anel.',
-        price: 39.90, genre: 'Fantasia', pages: 1178, year: 1954,
-        emoji: '💍', color: '#1e3a5f', available: true, licenseId: 1,
-      },
-      {
-        id: 2, title: 'Duna', author: 'Frank Herbert',
-        description: 'Em um planeta desértico, Paul Atreides descobre seu destino como líder.',
-        price: 34.90, genre: 'Ficção Científica', pages: 896, year: 1965,
-        emoji: '🏜️', color: '#78350f', available: true, licenseId: 2,
-      },
-      {
-        id: 3, title: 'Dom Casmurro', author: 'Machado de Assis',
-        description: 'Bentinho narra sua história de amor com Capitu e a dúvida que o consome.',
-        price: 19.90, genre: 'Literatura Brasileira', pages: 256, year: 1899,
-        emoji: '📖', color: '#3b0764', available: true, licenseId: 3,
-      },
-      {
-        id: 4, title: '1984', author: 'George Orwell',
-        description: 'Winston Smith vive em um estado totalitário onde o Grande Irmão tudo controla.',
-        price: 29.90, genre: 'Distopia', pages: 328, year: 1949,
-        emoji: '👁️', color: '#1c1917', available: true, licenseId: 4,
-      },
-      {
-        id: 5, title: 'O Pequeno Príncipe', author: 'Antoine de Saint-Exupéry',
-        description: 'Um príncipe vindo de um asteroide encontra um aviador no deserto.',
-        price: 24.90, genre: 'Clássico', pages: 96, year: 1943,
-        emoji: '⭐', color: '#7c3aed', available: true, licenseId: 5,
-      },
-      {
-        id: 6, title: 'A Revolução dos Bichos', author: 'George Orwell',
-        description: 'Animais de uma fazenda se rebelam contra os humanos em uma alegoria política.',
-        price: 22.90, genre: 'Sátira', pages: 144, year: 1945,
-        emoji: '🐷', color: '#15803d', available: true, licenseId: 6,
-      },
-    ];
+    return [];
   },
 };
 

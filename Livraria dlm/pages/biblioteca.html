@@ -151,59 +151,103 @@
 </div>
 
 <div id="toast-container"></div>
-<script src="../js/api.js?v=5"></script>
-<script src="../js/app.js?v=5"></script>
+<script src="../js/api.js?v=6"></script>
+<script src="../js/app.js?v=6"></script>
 <script>
 const { Auth, APIBooks, APILicenses, APIDLM } = window.DLM;
 
 // Estado do modal de transferência
 let _transfer = { licenseId: null, title: null, author: null, toAddress: null };
 
-document.addEventListener('DOMContentLoaded', () => {
+const COLORS = ['#1e3a5f','#78350f','#3b0764','#1c1917','#7c3aed','#15803d'];
+
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+document.addEventListener('DOMContentLoaded', async () => {
   if (!Auth.isLoggedIn()) {
     document.getElementById('not-logged').style.display = 'block';
     return;
   }
-
   document.getElementById('logged-content').style.display = 'block';
   const addr = Auth.getAddress() || '';
   document.getElementById('wallet-display').textContent = addr.slice(0,10)+'...'+addr.slice(-6);
+  await loadLibrary();
+});
 
-  const licenses = APILicenses.getMyLicenses();
-  document.getElementById('license-count').textContent = licenses.length + ' licença(s)';
+async function loadLibrary() {
+  const address = Auth.getAddress();
+  const grid    = document.getElementById('lib-grid');
 
-  if (licenses.length === 0) {
+  grid.innerHTML = '<p style="grid-column:1/-1;padding:2rem;color:var(--muted);font-size:.82rem;text-align:center">⏳ Carregando biblioteca da blockchain...</p>';
+
+  let booksToShow = [];
+
+  try {
+    // Fonte primária: DRM API (blockchain)
+    const result     = await APIDLM.busca(address);
+    const chainBooks = result.books || [];
+    const localLics  = APILicenses.getMyLicenses();
+
+    booksToShow = chainBooks.map(cb => {
+      const localLic  = localLics.find(l => String(l.licenseId) === String(cb.licenseId));
+      const localBook = localLic ? APIBooks.getById(localLic.bookId) : null;
+      const colorSeed = String(cb.licenseId).split('').reduce((a, c) => a + c.charCodeAt(0), 0);
+      return {
+        licenseId:   String(cb.licenseId),
+        title:       cb.title  || localBook?.title  || 'Sem título',
+        author:      cb.author || localBook?.author || '',
+        emoji:       localBook?.emoji || '📚',
+        color:       localBook?.color || COLORS[Math.abs(colorSeed) % COLORS.length],
+        purchasedAt: localLic?.purchasedAt || null,
+      };
+    });
+  } catch {
+    // Fallback: localStorage quando API está indisponível
+    const localLics = APILicenses.getMyLicenses();
+    booksToShow = localLics.map(lic => {
+      const book = APIBooks.getById(lic.bookId);
+      if (!book) return null;
+      return {
+        licenseId:   String(lic.licenseId),
+        title:       book.title,
+        author:      book.author,
+        emoji:       book.emoji || '📚',
+        color:       book.color || COLORS[book.id % COLORS.length],
+        purchasedAt: lic.purchasedAt,
+      };
+    }).filter(Boolean);
+  }
+
+  document.getElementById('license-count').textContent = booksToShow.length + ' licença(s)';
+  grid.innerHTML = '';
+
+  if (booksToShow.length === 0) {
     document.getElementById('empty-library').style.display = 'block';
     return;
   }
 
-  const colors = ['#1e3a5f','#78350f','#3b0764','#1c1917','#7c3aed','#15803d'];
-  const grid = document.getElementById('lib-grid');
-
-  licenses.forEach(lic => {
-    const book = APIBooks.getById(lic.bookId);
-    if (!book) return;
-    const color = book.color || colors[book.id % colors.length];
-    const date  = new Date(lic.purchasedAt).toLocaleDateString('pt-BR');
-
+  booksToShow.forEach(item => {
+    const date = item.purchasedAt ? new Date(item.purchasedAt).toLocaleDateString('pt-BR') : null;
     const card = document.createElement('div');
     card.className = 'lib-card';
     card.innerHTML = `
-      <div class="lib-cover" style="background:${color}">
-        <span>${book.emoji||'📚'}</span>
+      <div class="lib-cover" style="background:${esc(item.color)}">
+        <span>${esc(item.emoji)}</span>
       </div>
       <div class="lib-body">
-        <div class="lib-title">${book.title}</div>
-        <div class="lib-author">${book.author}</div>
+        <div class="lib-title">${esc(item.title)}</div>
+        <div class="lib-author">${esc(item.author)}</div>
         <div class="lib-actions">
-          <button class="btn btn-primary" onclick="openBook('${lic.licenseId}','${book.title}')">📖 Ler</button>
-          <button class="btn" onclick="openTransferModal('${lic.licenseId}','${book.title}','${book.author}')">🔄 Transferir</button>
+          <button class="btn btn-primary" onclick="openBook(${JSON.stringify(item.licenseId)},${JSON.stringify(item.title)})">📖 Ler</button>
+          <button class="btn" onclick="openTransferModal(${JSON.stringify(item.licenseId)},${JSON.stringify(item.title)},${JSON.stringify(item.author)})">🔄 Transferir</button>
         </div>
-        <div class="license-tag">License #${lic.licenseId} · comprado em ${date}</div>
+        <div class="license-tag">License #${esc(item.licenseId)}${date ? ' · adquirido em ' + date : ''}</div>
       </div>`;
     grid.appendChild(card);
   });
-});
+}
 
 async function openBook(licenseId, title) {
   toast(`Validando acesso ao "${title}" na blockchain...`, 'info', 2500);
@@ -229,20 +273,6 @@ async function openTransferModal(licenseId, title, author) {
   document.getElementById('btn-do-transfer').disabled      = false;
   document.getElementById('btn-do-transfer').textContent   = '✅ Confirmar e Assinar';
   document.getElementById('transfer-modal').style.display  = 'flex';
-
-  // Confirma posse via APIDLM.busca na DRM API
-  const publicKey = Auth.getAddress();
-  if (publicKey) {
-    try {
-      const { books } = await APIDLM.busca(publicKey);
-      const owned = books.find(b => String(b.licenseId) === String(licenseId));
-      if (!owned) {
-        toast('Este livro não consta na DRM API para o seu endereço.', 'err', 4000);
-      }
-    } catch {
-      // DRM API indisponível — segue com os dados locais
-    }
-  }
 }
 
 function closeTransferModal() {
