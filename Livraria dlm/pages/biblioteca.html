@@ -132,6 +132,7 @@
       <p style="font-size:.78rem;color:var(--muted);margin-bottom:.5rem">Destinatário verificado:</p>
       <div class="recipient-card">
         <div class="rc-name" id="rc-name">—</div>
+        <div class="rc-cpf" id="rc-cpf" style="font-size:.72rem;color:var(--muted);margin:.15rem 0 .3rem"></div>
         <div class="rc-addr" id="rc-addr">—</div>
       </div>
       <p style="font-size:.75rem;color:var(--muted);margin-bottom:0;line-height:1.6">
@@ -265,31 +266,46 @@ async function previewTransfer() {
   btn.textContent = '⏳ Verificando...';
 
   try {
-    const preview = await APIDLM.previewTransfer(toAddr, _transfer.licenseId);
-    const recipient = preview.newOwner || {};
+    let recipientName = null;
+    let recipientCpf  = null;
+
+    try {
+      // Tenta previewTransfer (retorna newOwner com nome e CPF)
+      const preview = await APIDLM.previewTransfer(toAddr, _transfer.licenseId);
+      const r = preview.newOwner || {};
+      recipientName = r.name || null;
+      recipientCpf  = r.cpf  || null;
+    } catch {
+      // previewTransfer falhou — tenta lookupUser pelo endereço
+      const user = await APIDLM.lookupUser(toAddr); // lança se carteira não existir
+      recipientName = user.name || null;
+      recipientCpf  = user.cpf  || null;
+    }
+
+    if (!recipientName) {
+      toast('Esta carteira não possui nome cadastrado na plataforma. Peça ao destinatário para se cadastrar antes de transferir.', 'err', 7000);
+      return;
+    }
 
     _transfer.toAddress = toAddr;
 
-    // Preenche passo 2
+    const cpfDigits = (recipientCpf || '').replace(/\D/g, '');
+    const cpfMasked = cpfDigits.length >= 11
+      ? `•••.•••.${cpfDigits.slice(6,9)}-${cpfDigits.slice(9,11)}`
+      : '(não informado)';
+
     document.getElementById('tbk-title-2').textContent  = _transfer.title;
     document.getElementById('tbk-author-2').textContent = _transfer.author;
     document.getElementById('tbk-id-2').textContent     = `Licença #${_transfer.licenseId}`;
-    document.getElementById('rc-name').textContent      = recipient.name || '(sem nome cadastrado)';
+    document.getElementById('rc-name').textContent      = recipientName;
+    document.getElementById('rc-cpf').textContent       = `CPF: ${cpfMasked}`;
     document.getElementById('rc-addr').textContent      = toAddr;
 
     document.getElementById('transfer-step-1').style.display = 'none';
     document.getElementById('transfer-step-2').style.display = 'block';
+
   } catch (err) {
-    // API indisponível — avança em modo demo sem verificar nome
-    _transfer.toAddress = toAddr;
-    document.getElementById('tbk-title-2').textContent  = _transfer.title;
-    document.getElementById('tbk-author-2').textContent = _transfer.author;
-    document.getElementById('tbk-id-2').textContent     = `Licença #${_transfer.licenseId}`;
-    document.getElementById('rc-name').textContent      = '(não verificado — modo demo)';
-    document.getElementById('rc-addr').textContent      = toAddr;
-    document.getElementById('transfer-step-1').style.display = 'none';
-    document.getElementById('transfer-step-2').style.display = 'block';
-    toast('API indisponível — prosseguindo em modo demo.', 'info');
+    toast('Carteira não cadastrada na plataforma. A transferência não pode ser realizada.', 'err', 7000);
   } finally {
     btn.disabled    = false;
     btn.textContent = 'Verificar destinatário →';
