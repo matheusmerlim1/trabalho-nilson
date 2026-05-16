@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>LivrosDLM — Painel da Editora</title>
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Inter:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet"/>
-  <link rel="stylesheet" href="../css/style.css"/>
+  <link rel="stylesheet" href="../css/style.css?v=4"/>
   <style>
     .pub-layout { display:grid; grid-template-columns:1fr 1fr; gap:2rem; padding:2rem; max-width:1100px; margin:0 auto; }
     .pub-section { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:1.5rem; }
@@ -132,8 +132,8 @@
 </div>
 
 <div id="toast-container"></div>
-<script src="../js/api.js?v=3"></script>
-<script src="../js/app.js?v=3"></script>
+<script src="../js/api.js?v=4"></script>
+<script src="../js/app.js?v=4"></script>
 <script>
 const { Auth, APIBooks, APIPublisher, APIDLM } = window.DLM;
 
@@ -219,9 +219,9 @@ async function publishBook() {
     prog.style.width = '40%';
     btn.innerHTML = '<span class="spin"></span> Encriptando PDF (v3)...';
 
-    // Encripta via DRM API (v3 — registra titular no licenseRegistry)
+    // Encripta via DRM API (v3 — registra titular no licenseRegistry; embute título e autor)
     const pdfBase64 = btoa(String.fromCharCode(...new Uint8Array(pdfBuffer)));
-    const encResult = await APIDLM.encrypt(pdfBase64, publicKey, pubName, pubCpf);
+    const encResult = await APIDLM.encrypt(pdfBase64, publicKey, pubName, pubCpf, null, title, author);
     const licenseId = encResult.licenseId;
     dlmBuffer = Uint8Array.from(atob(encResult.dlmBase64), c => c.charCodeAt(0)).buffer;
 

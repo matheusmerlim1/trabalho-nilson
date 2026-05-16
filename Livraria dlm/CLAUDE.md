@@ -95,8 +95,9 @@ Para trocar os servidores em produção:
 |--------|-----------|
 | `APIDLM.registerUser(address, name, cpf)` | Cadastra usuário |
 | `APIDLM.lookupUser(address)` | Consulta nome+CPF por endereço |
-| `APIDLM.encrypt(pdfBase64, publicKey, userName, userCPF, licenseId?)` | Encripta PDF → .dlm v3 |
+| `APIDLM.encrypt(pdfBase64, publicKey, userName, userCPF, licenseId?, title?, author?)` | Encripta PDF → .dlm v3 (title e author são embutidos no arquivo se fornecidos) |
 | `APIDLM.decrypt(dlmBase64, publicKey, signature, message)` | Decifra com cadeia de custódia |
+| `APIDLM.busca(publicKey)` | Lista todos os livros (title, author, licenseId) de um endereço |
 | `APIDLM.previewTransfer(toPublicKey, licenseId)` | Consulta destinatário |
 | `APIDLM.transfer(fromKey, toKey, licenseId, sig, msg)` | Executa transferência |
 
@@ -137,6 +138,41 @@ Claude Code também sincroniza ao encerrar a sessão via hook `Stop` em `.claude
    - [ ] DRM API (`DRM_API_URL`) está acessível pelo servidor
    - [ ] Contrato compila sem warnings (`npx hardhat compile`)
 4. Commit e push — o hook de post-commit empurra automaticamente
+
+## Regra de Versão dos Arquivos
+
+**Antes de qualquer alteração ou commit, verificar se todos os arquivos estão usando as versões mais recentes:**
+
+### Verificação obrigatória de versões
+
+| Item | Versão atual | O que checar |
+|------|-------------|--------------|
+| Formato `.dlm` | **v3** | Nenhum arquivo deve gerar v1 ou v2; `APIDLM.encrypt` é a única rota de encriptação |
+| `js/api.js` | **?v=3** (cache-busting) | Todas as páginas HTML devem carregar com `<script src="../js/api.js?v=3">` |
+| `js/app.js` | **?v=3** (cache-busting) | Idem — `<script src="../js/app.js?v=3">` |
+| `css/style.css` | **?v=3** (cache-busting) | `<link rel="stylesheet" href="../css/style.css?v=3">` |
+| Endpoint de encriptação | **`APIDLM.encrypt`** | Nenhum código deve chamar rotas `/encrypt` legadas (v1/v2) diretamente |
+
+### Como verificar
+
+```bash
+# Checar se alguma página ainda usa scripts sem cache-busting
+grep -rn "api.js\"" pages/ index.html
+grep -rn "app.js\"" pages/ index.html
+grep -rn "style.css\"" pages/ index.html
+
+# Checar se ainda existe chamada a rotas v1/v2 legadas
+grep -rn "/encrypt" js/api.js
+grep -rn "dlm-v1\|dlm-v2\|version.*1\|version.*2" js/
+
+# Checar se publisher.html usa APIDLM.encrypt (e não rota direta)
+grep -n "APIDLM.encrypt\|/publisher/encrypt\|/encrypt" pages/publisher.html
+
+# Checar se biblioteca.html usa o fluxo correto (busca → previewTransfer → transfer)
+grep -n "APIDLM.busca\|APIDLM.previewTransfer\|APIDLM.transfer" pages/biblioteca.html
+```
+
+**Regra:** ao incrementar qualquer versão de script ou formato, atualizar o sufixo `?v=N` em **todos** os arquivos HTML do projeto de uma vez. Nunca deixar páginas com versões diferentes entre si.
 
 ## Regra de Commit
 

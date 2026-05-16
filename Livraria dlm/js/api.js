@@ -296,12 +296,14 @@ const APIDLM = {
    * @param {string} userName
    * @param {string} userCPF
    * @param {string} [licenseId] — gerado automaticamente se omitido
-   * @returns {{ dlmBase64, licenseId, contentHash, owner }}
+   * @param {string} [title]     — título do livro (embutido no .dlm)
+   * @param {string} [author]    — autor do livro (embutido no .dlm)
+   * @returns {{ dlmBase64, licenseId, contentHash, owner, metadata }}
    */
-  async encrypt(pdfBase64, publicKey, userName, userCPF, licenseId = null) {
+  async encrypt(pdfBase64, publicKey, userName, userCPF, licenseId = null, title = null, author = null) {
     return drmFetch('/encrypt', {
       method: 'POST',
-      body: JSON.stringify({ pdfBase64, publicKey, userName, userCPF, licenseId }),
+      body: JSON.stringify({ pdfBase64, publicKey, userName, userCPF, licenseId, title, author }),
     });
   },
 
@@ -357,6 +359,16 @@ const APIDLM = {
       method: 'POST',
       body: JSON.stringify({ fromPublicKey, toPublicKey, licenseId, signature, message }),
     });
+  },
+
+  /**
+   * Busca todos os livros registrados para uma chave pública na DRM API.
+   * Usado para listar os livros que o usuário possui antes de uma transferência.
+   * @param {string} publicKey — endereço Ethereum do titular
+   * @returns {{ publicKey, books: Array<{ title, author, licenseId }> }}
+   */
+  async busca(publicKey) {
+    return drmFetch(`/busca?publicKey=${encodeURIComponent(publicKey)}`);
   },
 };
 
