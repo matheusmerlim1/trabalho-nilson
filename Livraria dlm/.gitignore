@@ -10,6 +10,9 @@ storage/encrypted/
 .DS_Store
 Thumbs.db
 
+# Arquivos DLM gerados em testes — nunca commitar
+*.dlm
+
 # Logs
 *.log
 npm-debug.log*
