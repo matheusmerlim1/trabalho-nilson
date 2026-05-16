@@ -242,18 +242,10 @@ const APIPublisher = {
   },
 
   async encryptPDF(pdfBase64, licenseId, ownerAddress) {
-    try {
-      return await apiFetch('/publisher/encrypt', {
-        method: 'POST',
-        body: JSON.stringify({ pdfBase64, licenseId, ownerAddress }),
-      });
-    } catch {
-      return {
-        dlmBase64: btoa('DLM\x01' + licenseId + '_encrypted_content_demo'),
-        contentHash: '0x' + Array.from({ length: 64 }, () => '0123456789abcdef'[Math.floor(Math.random() * 16)]).join(''),
-        licenseId,
-      };
-    }
+    return apiFetch('/publisher/encrypt', {
+      method: 'POST',
+      body: JSON.stringify({ pdfBase64, licenseId, ownerAddress }),
+    });
   },
 
   async uploadPDF(bookId, pdfBase64) {
