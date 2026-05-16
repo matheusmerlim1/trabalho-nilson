@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>LivrosDLM — Painel da Editora</title>
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Inter:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet"/>
-  <link rel="stylesheet" href="../css/style.css?v=4"/>
+  <link rel="stylesheet" href="../css/style.css?v=5"/>
   <style>
     .pub-layout { display:grid; grid-template-columns:1fr 1fr; gap:2rem; padding:2rem; max-width:1100px; margin:0 auto; }
     .pub-section { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:1.5rem; }
@@ -132,8 +132,8 @@
 </div>
 
 <div id="toast-container"></div>
-<script src="../js/api.js?v=4"></script>
-<script src="../js/app.js?v=4"></script>
+<script src="../js/api.js?v=5"></script>
+<script src="../js/app.js?v=5"></script>
 <script>
 const { Auth, APIBooks, APILicenses, APIPublisher, APIDLM } = window.DLM;
 
@@ -211,9 +211,14 @@ async function publishBook() {
   try {
     prog.style.width = '15%';
 
-    // Registra o publisher na DRM API (nome + CPF vinculados ao endereço)
     const publicKey = Auth.getAddress();
-    await APIDLM.registerUser(publicKey, pubName, pubCpf);
+
+    // Best-effort: registra na DRM API sem bloquear o fluxo se a API estiver fora
+    try {
+      await APIDLM.registerUser(publicKey, pubName, pubCpf);
+    } catch {
+      // API indisponível — continua sem pré-registro; encrypt inclui os dados do titular
+    }
 
     // SHA-256 do PDF
     const hashBuffer = await crypto.subtle.digest('SHA-256', pdfBuffer);

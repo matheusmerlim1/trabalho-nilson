@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>LivrosDLM — Minha Biblioteca</title>
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Inter:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet"/>
-  <link rel="stylesheet" href="../css/style.css?v=4"/>
+  <link rel="stylesheet" href="../css/style.css?v=5"/>
   <style>
     .lib-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:1.25rem; padding:0 2rem 3rem; }
     .lib-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; }
@@ -151,8 +151,8 @@
 </div>
 
 <div id="toast-container"></div>
-<script src="../js/api.js?v=4"></script>
-<script src="../js/app.js?v=4"></script>
+<script src="../js/api.js?v=5"></script>
+<script src="../js/app.js?v=5"></script>
 <script>
 const { Auth, APIBooks, APILicenses, APIDLM } = window.DLM;
 
@@ -256,9 +256,14 @@ function backToStep1() {
 }
 
 async function previewTransfer() {
-  const toAddr = document.getElementById('transfer-addr').value.trim();
+  const toAddr  = document.getElementById('transfer-addr').value.trim();
+  const fromKey = Auth.getAddress();
+
   if (!/^0x[0-9a-fA-F]{40}$/i.test(toAddr)) {
-    toast('Endereço Ethereum inválido.', 'err'); return;
+    toast('Endereço Ethereum inválido. Informe um endereço no formato 0x... (42 caracteres hex).', 'err'); return;
+  }
+  if (fromKey && toAddr.toLowerCase() === fromKey.toLowerCase()) {
+    toast('Não é possível transferir um livro para você mesmo.', 'err'); return;
   }
 
   const btn = document.getElementById('btn-preview');
@@ -276,10 +281,14 @@ async function previewTransfer() {
       recipientName = r.name || null;
       recipientCpf  = r.cpf  || null;
     } catch {
-      // previewTransfer falhou — tenta lookupUser pelo endereço
-      const user = await APIDLM.lookupUser(toAddr); // lança se carteira não existir
-      recipientName = user.name || null;
-      recipientCpf  = user.cpf  || null;
+      try {
+        // previewTransfer falhou — tenta lookupUser pelo endereço
+        const user = await APIDLM.lookupUser(toAddr);
+        recipientName = user.name || null;
+        recipientCpf  = user.cpf  || null;
+      } catch {
+        // ambos falharam — recipientName fica null, bloqueado abaixo
+      }
     }
 
     if (!recipientName) {
