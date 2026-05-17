@@ -432,8 +432,6 @@ async function dlmAuth(address, displayName) {
   me = { username: displayName || address.slice(0, 8), wallet: address };
   localStorage.setItem("dlm_token", token);
   localStorage.setItem("dlm_user", JSON.stringify(me));
-  // Salva dlm_address para compatibilidade com pages/biblioteca.html (Auth.getAddress())
-  localStorage.setItem("dlm_address", address.toLowerCase());
   return me;
 }
 
@@ -491,27 +489,12 @@ function findLocalBook(licenseId) {
 }
 
 async function getUserBooks() {
-  const cacheKey = `dlm_busca_cache_${(me.wallet || '').toLowerCase()}`;
-
-  // 1. Busca no servidor
   let chainBooks = [];
   try {
     const result = await window.DLM.APIDLM.busca(me.wallet);
     chainBooks = result.books || [];
-    // Salva no cache mesmo se vazio (para detectar lista limpa explicitamente)
-    if (chainBooks.length > 0)
-      localStorage.setItem(cacheKey, JSON.stringify(chainBooks));
-  } catch { /* servidor fora */ }
+  } catch { /* servidor fora — usa apenas localStorage */ }
 
-  // 2. Se servidor retornou vazio, usa cache de sessões anteriores
-  if (chainBooks.length === 0) {
-    try {
-      const cached = localStorage.getItem(cacheKey);
-      if (cached) chainBooks = JSON.parse(cached);
-    } catch { /* cache corrompido */ }
-  }
-
-  // 3. Mapeia livros do servidor (com enriquecimento local)
   const serverMapped = chainBooks.map(cb => {
     const localBook = findLocalBook(cb.licenseId);
     const seed = String(cb.licenseId).split('').reduce((a,c) => a + c.charCodeAt(0), 0);
@@ -524,23 +507,23 @@ async function getUserBooks() {
     };
   });
 
-  // 4. Adiciona licenças do localStorage não presentes no servidor
+  // Inclui entradas do localStorage que não vieram do servidor (Railway reiniciou, etc.)
   const serverIds = new Set(serverMapped.map(b => String(b.licenseId)));
   const localLics = window.DLM.APILicenses.getMyLicenses();
-  const localOnly = localLics
-    .filter(lic => !serverIds.has(String(lic.licenseId)))
-    .map(lic => {
-      const book = window.DLM.APIBooks.getById(lic.bookId)
-        || window.DLM.APIBooks.getAll().find(b => String(b.licenseId) === String(lic.licenseId));
-      const seed = String(lic.licenseId).split('').reduce((a,c) => a + c.charCodeAt(0), 0);
-      return {
-        licenseId: String(lic.licenseId),
-        title:     book?.title  || `Licença #${lic.licenseId}`,
-        author:    book?.author || '',
-        color:     book?.color  || COLORS[Math.abs(seed) % COLORS.length],
-        fromChain: false,
-      };
-    });
+  const localOnly = localLics.map(lic => {
+    if (serverIds.has(String(lic.licenseId))) return null;
+    const book = window.DLM.APIBooks.getById(lic.bookId)
+      || window.DLM.APIBooks.getAll().find(b => String(b.licenseId) === String(lic.licenseId));
+    if (!book) return null;
+    const seed = String(lic.licenseId).split('').reduce((a,c) => a + c.charCodeAt(0), 0);
+    return {
+      licenseId: String(lic.licenseId),
+      title:     book.title,
+      author:    book.author || '',
+      color:     book.color || COLORS[Math.abs(seed) % COLORS.length],
+      fromChain: false,
+    };
+  }).filter(Boolean);
 
   return [...serverMapped, ...localOnly];
 }

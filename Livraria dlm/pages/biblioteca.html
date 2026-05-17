@@ -170,74 +170,54 @@ document.addEventListener('DOMContentLoaded', async () => {
     return;
   }
   document.getElementById('logged-content').style.display = 'block';
-  // Auth.getAddress() lê dlm_address; fallback: dlm_user.wallet (login via index.html)
-  const userObj = (() => { try { return JSON.parse(localStorage.getItem('dlm_user') || 'null'); } catch { return null; } })();
-  const addr = Auth.getAddress() || userObj?.wallet || '';
-  if (addr) localStorage.setItem('dlm_address', addr.toLowerCase()); // garante consistência
-  document.getElementById('wallet-display').textContent = addr ? addr.slice(0,10)+'...'+addr.slice(-6) : '—';
-  await loadLibrary(addr);
+  const addr = Auth.getAddress() || '';
+  document.getElementById('wallet-display').textContent = addr.slice(0,10)+'...'+addr.slice(-6);
+  await loadLibrary();
 });
 
-async function loadLibrary(address) {
-  if (!address) address = Auth.getAddress() || '';
-  const grid     = document.getElementById('lib-grid');
-  const cacheKey = `dlm_busca_cache_${address.toLowerCase()}`;
+async function loadLibrary() {
+  const address = Auth.getAddress();
+  const grid    = document.getElementById('lib-grid');
 
   grid.innerHTML = '<p style="grid-column:1/-1;padding:2rem;color:var(--muted);font-size:.82rem;text-align:center">⏳ Carregando biblioteca da blockchain...</p>';
 
-  // 1. Busca no servidor
-  let chainBooks = [];
+  let booksToShow = [];
+
   try {
-    const result = await APIDLM.busca(address);
-    chainBooks = result.books || [];
-    if (chainBooks.length > 0)
-      localStorage.setItem(cacheKey, JSON.stringify(chainBooks));
-  } catch { /* servidor fora */ }
+    // Fonte primária: DRM API (blockchain)
+    const result     = await APIDLM.busca(address);
+    const chainBooks = result.books || [];
+    const localLics  = APILicenses.getMyLicenses();
 
-  // 2. Se servidor retornou vazio, usa cache de sessões anteriores
-  if (chainBooks.length === 0) {
-    try {
-      const cached = localStorage.getItem(cacheKey);
-      if (cached) chainBooks = JSON.parse(cached);
-    } catch { /* cache corrompido */ }
-  }
-
-  // 3. Mapeia livros do servidor com enriquecimento local
-  const localLics = APILicenses.getMyLicenses();
-  const serverIds = new Set();
-  const booksFromServer = chainBooks.map(cb => {
-    serverIds.add(String(cb.licenseId));
-    const localLic  = localLics.find(l => String(l.licenseId) === String(cb.licenseId));
-    const localBook = localLic ? APIBooks.getById(localLic.bookId) : null;
-    const colorSeed = String(cb.licenseId).split('').reduce((a, c) => a + c.charCodeAt(0), 0);
-    return {
-      licenseId:   String(cb.licenseId),
-      title:       cb.title  || localBook?.title  || `Licença #${cb.licenseId}`,
-      author:      cb.author || localBook?.author || '',
-      emoji:       localBook?.emoji || '📚',
-      color:       localBook?.color || COLORS[Math.abs(colorSeed) % COLORS.length],
-      purchasedAt: localLic?.purchasedAt || null,
-    };
-  });
-
-  // 4. Adiciona licenças do localStorage não presentes no servidor
-  const booksFromLocal = localLics
-    .filter(lic => !serverIds.has(String(lic.licenseId)))
-    .map(lic => {
-      const book = APIBooks.getById(lic.bookId)
-        || APIBooks.getAll().find(b => String(b.licenseId) === String(lic.licenseId));
-      const colorSeed = String(lic.licenseId).split('').reduce((a, c) => a + c.charCodeAt(0), 0);
+    booksToShow = chainBooks.map(cb => {
+      const localLic  = localLics.find(l => String(l.licenseId) === String(cb.licenseId));
+      const localBook = localLic ? APIBooks.getById(localLic.bookId) : null;
+      const colorSeed = String(cb.licenseId).split('').reduce((a, c) => a + c.charCodeAt(0), 0);
       return {
-        licenseId:   String(lic.licenseId),
-        title:       book?.title  || `Licença #${lic.licenseId}`,
-        author:      book?.author || '',
-        emoji:       book?.emoji  || '📚',
-        color:       book?.color  || COLORS[Math.abs(colorSeed) % COLORS.length],
-        purchasedAt: lic.purchasedAt || null,
+        licenseId:   String(cb.licenseId),
+        title:       cb.title  || localBook?.title  || 'Sem título',
+        author:      cb.author || localBook?.author || '',
+        emoji:       localBook?.emoji || '📚',
+        color:       localBook?.color || COLORS[Math.abs(colorSeed) % COLORS.length],
+        purchasedAt: localLic?.purchasedAt || null,
       };
     });
-
-  let booksToShow = [...booksFromServer, ...booksFromLocal];
+  } catch {
+    // Fallback: localStorage quando API está indisponível
+    const localLics = APILicenses.getMyLicenses();
+    booksToShow = localLics.map(lic => {
+      const book = APIBooks.getById(lic.bookId);
+      if (!book) return null;
+      return {
+        licenseId:   String(lic.licenseId),
+        title:       book.title,
+        author:      book.author,
+        emoji:       book.emoji || '📚',
+        color:       book.color || COLORS[book.id % COLORS.length],
+        purchasedAt: lic.purchasedAt,
+      };
+    }).filter(Boolean);
+  }
 
   document.getElementById('license-count').textContent = booksToShow.length + ' licença(s)';
   grid.innerHTML = '';
