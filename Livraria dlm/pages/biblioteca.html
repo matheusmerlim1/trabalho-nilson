@@ -38,6 +38,15 @@
     .recipient-card .rc-name { font-weight:600; margin-bottom:.2rem; }
     .recipient-card .rc-addr { font-family:var(--mono); font-size:.68rem; color:var(--muted); word-break:break-all; }
     .step-indicator { font-size:.72rem; color:var(--muted); margin-bottom:1rem; letter-spacing:.05em; text-transform:uppercase; }
+    /* PDF Viewer */
+    .pdf-viewer-overlay { position:fixed; inset:0; background:#0f172a; z-index:2000; display:none; flex-direction:column; }
+    .pdf-viewer-overlay.open { display:flex; }
+    .pdf-toolbar { background:#1e293b; border-bottom:1px solid #334155; padding:.75rem 1.5rem; display:flex; align-items:center; gap:1rem; flex-shrink:0; }
+    .pdf-toolbar-title { font-family:var(--serif); font-size:1.05rem; color:#93c5fd; flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .pdf-toolbar-sub { font-size:.68rem; color:#64748b; font-family:var(--mono); margin-top:.1rem; }
+    .pdf-pages { flex:1; overflow-y:auto; padding:1.5rem; display:flex; flex-direction:column; align-items:center; gap:1rem; }
+    .pdf-pages canvas { border-radius:4px; box-shadow:0 4px 20px rgba(0,0,0,.5); max-width:100%; }
+    .pdf-loading { color:#64748b; padding:3rem; text-align:center; font-size:.88rem; }
   </style>
 </head>
 <body>
@@ -46,7 +55,7 @@
   <a href="../index.html" class="nav-brand">📚 Livros<span>DLM</span></a>
   <ul class="nav-links">
     <li><a href="../index.html">Início</a></li>
-    <li><a href="catalog.html">Minha Biblioteca</a></li>
+    <li><a href="biblioteca.html" class="active">Minha Biblioteca</a></li>
     <li><a href="publisher.html">Adicionar Livro</a></li>
   </ul>
   <div class="nav-right">
@@ -149,7 +158,24 @@
   </div>
 </div>
 
+<!-- PDF Viewer Overlay -->
+<div id="pdf-viewer" class="pdf-viewer-overlay">
+  <div class="pdf-toolbar">
+    <div style="flex:1;min-width:0">
+      <div class="pdf-toolbar-title" id="pdf-title">Carregando...</div>
+      <div class="pdf-toolbar-sub" id="pdf-sub"></div>
+    </div>
+    <span style="font-size:.7rem;color:#64748b;font-family:monospace;margin-right:.5rem">🔐 DLM v3</span>
+    <button class="btn btn-ghost btn-sm" onclick="closePdfViewer()" style="flex-shrink:0;color:#94a3b8;border-color:#334155">✕ Fechar</button>
+  </div>
+  <div id="pdf-pages" class="pdf-pages"></div>
+</div>
+
+<!-- Input oculto para seleção do .dlm -->
+<input type="file" id="dlm-file-input" accept=".dlm" style="display:none"/>
+
 <div id="toast-container"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="../js/api.js?v=6"></script>
 <script src="../js/app.js?v=6"></script>
 <script>
@@ -263,13 +289,94 @@ async function loadLibrary(address) {
   });
 }
 
-async function openBook(licenseId, title) {
-  toast(`Validando acesso ao "${title}" na blockchain...`, 'info', 2500);
-  try {
-    const result = await APILicenses.openBook(licenseId);
-    if (result.granted) toast(`✅ Acesso confirmado! TX: ${result.txHash.slice(0,16)}...`, 'ok');
-    else toast('Acesso negado pela blockchain.', 'err');
-  } catch(e) { toast('Erro: '+e.message,'err'); }
+function openBook(licenseId, title) {
+  if (!window.ethereum) {
+    toast('MetaMask é necessário para ler o livro. Instale a extensão.', 'err', 5000);
+    return;
+  }
+  const input = document.getElementById('dlm-file-input');
+  input.dataset.licenseId = licenseId;
+  input.dataset.title     = title;
+  input.click();
+}
+
+document.getElementById('dlm-file-input').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+
+    const licenseId = e.target.dataset.licenseId;
+    const title     = e.target.dataset.title;
+    const address   = Auth.getAddress();
+    if (!address) { toast('Faça login para ler o livro.', 'err'); return; }
+
+    openPdfViewer(title, licenseId);
+
+    try {
+      // Arquivo → base64
+      const dlmBuffer = await file.arrayBuffer();
+      const bytes = new Uint8Array(dlmBuffer);
+      let binary = '';
+      const CHUNK = 8192;
+      for (let i = 0; i < bytes.length; i += CHUNK)
+        binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+      const dlmBase64 = btoa(binary);
+
+      // Assina com MetaMask
+      document.getElementById('pdf-loading-msg').textContent = '🦊 Aguardando assinatura MetaMask...';
+      const message   = `DLM:decrypt:${licenseId}:${Date.now()}`;
+      const signature = await window.ethereum.request({
+        method: 'personal_sign',
+        params: [message, address],
+      });
+
+      document.getElementById('pdf-loading-msg').textContent = '🔓 Descriptografando...';
+      const { pdfBase64 } = await APIDLM.decrypt(dlmBase64, address, signature, message);
+
+      // base64 → ArrayBuffer
+      const pdfBinary = atob(pdfBase64);
+      const pdfBytes  = new Uint8Array(pdfBinary.length);
+      for (let i = 0; i < pdfBinary.length; i++) pdfBytes[i] = pdfBinary.charCodeAt(i);
+
+      await renderPdf(pdfBytes.buffer);
+    } catch(err) {
+      closePdfViewer();
+      toast('Erro ao abrir: ' + err.message, 'err', 6000);
+    }
+  });
+
+function openPdfViewer(title, licenseId) {
+  document.getElementById('pdf-title').textContent = title || 'Livro DLM';
+  document.getElementById('pdf-sub').textContent   = `Licença #${licenseId}`;
+  document.getElementById('pdf-pages').innerHTML   =
+    '<div class="pdf-loading"><span id="pdf-loading-msg">⏳ Preparando...</span></div>';
+  document.getElementById('pdf-viewer').classList.add('open');
+}
+
+async function renderPdf(pdfArrayBuffer) {
+  pdfjsLib.GlobalWorkerOptions.workerSrc =
+    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  const pages = document.getElementById('pdf-pages');
+  pages.innerHTML = '<div class="pdf-loading">⏳ Renderizando páginas...</div>';
+
+  const pdf   = await pdfjsLib.getDocument({ data: pdfArrayBuffer }).promise;
+  const total = pdf.numPages;
+  pages.innerHTML = '';
+
+  for (let n = 1; n <= total; n++) {
+    const page     = await pdf.getPage(n);
+    const viewport = page.getViewport({ scale: 1.5 });
+    const canvas   = document.createElement('canvas');
+    canvas.width   = viewport.width;
+    canvas.height  = viewport.height;
+    pages.appendChild(canvas);
+    await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+  }
+}
+
+function closePdfViewer() {
+  document.getElementById('pdf-viewer').classList.remove('open');
+  document.getElementById('pdf-pages').innerHTML = '';
 }
 
 async function openTransferModal(licenseId, title, author) {
