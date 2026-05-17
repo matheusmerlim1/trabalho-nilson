@@ -432,6 +432,7 @@ async function dlmAuth(address, displayName) {
   me = { username: displayName || address.slice(0, 8), wallet: address };
   localStorage.setItem("dlm_token", token);
   localStorage.setItem("dlm_user", JSON.stringify(me));
+  localStorage.setItem("dlm_address", address.toLowerCase());
   return me;
 }
 
@@ -489,11 +490,22 @@ function findLocalBook(licenseId) {
 }
 
 async function getUserBooks() {
+  const cacheKey = `dlm_busca_cache_${(me.wallet || '').toLowerCase()}`;
   let chainBooks = [];
   try {
     const result = await window.DLM.APIDLM.busca(me.wallet);
     chainBooks = result.books || [];
-  } catch { /* servidor fora — usa apenas localStorage */ }
+    if (chainBooks.length > 0)
+      localStorage.setItem(cacheKey, JSON.stringify(chainBooks));
+  } catch { /* servidor fora */ }
+
+  // Servidor retornou vazio (Railway reiniciou): usa cache da última sessão
+  if (chainBooks.length === 0) {
+    try {
+      const cached = localStorage.getItem(cacheKey);
+      if (cached) chainBooks = JSON.parse(cached);
+    } catch { }
+  }
 
   const serverMapped = chainBooks.map(cb => {
     const localBook = findLocalBook(cb.licenseId);
@@ -507,20 +519,18 @@ async function getUserBooks() {
     };
   });
 
-  // Inclui entradas do localStorage que não vieram do servidor (Railway reiniciou, etc.)
   const serverIds = new Set(serverMapped.map(b => String(b.licenseId)));
   const localLics = window.DLM.APILicenses.getMyLicenses();
   const localOnly = localLics.map(lic => {
     if (serverIds.has(String(lic.licenseId))) return null;
     const book = window.DLM.APIBooks.getById(lic.bookId)
       || window.DLM.APIBooks.getAll().find(b => String(b.licenseId) === String(lic.licenseId));
-    if (!book) return null;
     const seed = String(lic.licenseId).split('').reduce((a,c) => a + c.charCodeAt(0), 0);
     return {
       licenseId: String(lic.licenseId),
-      title:     book.title,
-      author:    book.author || '',
-      color:     book.color || COLORS[Math.abs(seed) % COLORS.length],
+      title:     book?.title  || `Licença #${lic.licenseId}`,
+      author:    book?.author || '',
+      color:     book?.color  || COLORS[Math.abs(seed) % COLORS.length],
       fromChain: false,
     };
   }).filter(Boolean);
