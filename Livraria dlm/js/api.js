@@ -320,12 +320,14 @@ const APIDLM = {
    *     params: [message, fromPublicKey],
    *   });
    *
+   * @param {string} [title]  — título do livro (preservado no registro se ainda não existir)
+   * @param {string} [author] — autor do livro (preservado no registro se ainda não existir)
    * @returns {{ licenseId, previousOwner, newOwner, transferredAt }}
    */
-  async transfer(fromPublicKey, toPublicKey, licenseId, signature, message) {
+  async transfer(fromPublicKey, toPublicKey, licenseId, signature, message, title = null, author = null) {
     return drmFetch('/transfer', {
       method: 'POST',
-      body: JSON.stringify({ fromPublicKey, toPublicKey, licenseId, signature, message }),
+      body: JSON.stringify({ fromPublicKey, toPublicKey, licenseId, signature, message, title, author }),
     });
   },
 

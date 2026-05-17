@@ -495,7 +495,11 @@ async function doTransfer() {
       params: [message, fromKey],
     });
 
-    await APIDLM.transfer(fromKey, toKey, licenseId, signature, message);
+    // Passa title/author para o servidor preservar no registro (ajuda licenças antigas sem esses campos)
+    // Descarta o fallback gerado automaticamente para não persistir "Licença #N" como título real
+    const realTitle  = (_transfer.title  && _transfer.title  !== `Licença #${String(licenseId)}`) ? _transfer.title  : null;
+    const realAuthor = _transfer.author || null;
+    await APIDLM.transfer(fromKey, toKey, licenseId, signature, message, realTitle, realAuthor);
 
     // Remove da biblioteca local
     const current = JSON.parse(localStorage.getItem('dlm_my_licenses') || '[]');
