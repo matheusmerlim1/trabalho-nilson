@@ -489,36 +489,43 @@ function findLocalBook(licenseId) {
 }
 
 async function getUserBooks() {
+  let chainBooks = [];
   try {
-    const result     = await window.DLM.APIDLM.busca(me.wallet);
-    const chainBooks = result.books || [];
-    return chainBooks.map(cb => {
-      const localBook = findLocalBook(cb.licenseId);
-      const seed = String(cb.licenseId).split('').reduce((a,c) => a + c.charCodeAt(0), 0);
-      return {
-        licenseId: String(cb.licenseId),
-        title:     cb.title  || localBook?.title  || `Licença #${cb.licenseId}`,
-        author:    cb.author || localBook?.author || '',
-        color:     localBook?.color || COLORS[Math.abs(seed) % COLORS.length],
-        fromChain: true,
-      };
-    });
-  } catch {
-    // Fallback: localStorage quando API está fora
-    const localLics = window.DLM.APILicenses.getMyLicenses();
-    return localLics.map(lic => {
-      const book = window.DLM.APIBooks.getById(lic.bookId)
-        || window.DLM.APIBooks.getAll().find(b => String(b.licenseId) === String(lic.licenseId));
-      if (!book) return null;
-      return {
-        licenseId: String(lic.licenseId),
-        title:     book.title,
-        author:    book.author || '',
-        color:     book.color || COLORS[book.id % COLORS.length],
-        fromChain: false,
-      };
-    }).filter(Boolean);
-  }
+    const result = await window.DLM.APIDLM.busca(me.wallet);
+    chainBooks = result.books || [];
+  } catch { /* servidor fora — usa apenas localStorage */ }
+
+  const serverMapped = chainBooks.map(cb => {
+    const localBook = findLocalBook(cb.licenseId);
+    const seed = String(cb.licenseId).split('').reduce((a,c) => a + c.charCodeAt(0), 0);
+    return {
+      licenseId: String(cb.licenseId),
+      title:     cb.title  || localBook?.title  || `Licença #${cb.licenseId}`,
+      author:    cb.author || localBook?.author || '',
+      color:     localBook?.color || COLORS[Math.abs(seed) % COLORS.length],
+      fromChain: true,
+    };
+  });
+
+  // Inclui entradas do localStorage que não vieram do servidor (Railway reiniciou, etc.)
+  const serverIds = new Set(serverMapped.map(b => String(b.licenseId)));
+  const localLics = window.DLM.APILicenses.getMyLicenses();
+  const localOnly = localLics.map(lic => {
+    if (serverIds.has(String(lic.licenseId))) return null;
+    const book = window.DLM.APIBooks.getById(lic.bookId)
+      || window.DLM.APIBooks.getAll().find(b => String(b.licenseId) === String(lic.licenseId));
+    if (!book) return null;
+    const seed = String(lic.licenseId).split('').reduce((a,c) => a + c.charCodeAt(0), 0);
+    return {
+      licenseId: String(lic.licenseId),
+      title:     book.title,
+      author:    book.author || '',
+      color:     book.color || COLORS[Math.abs(seed) % COLORS.length],
+      fromChain: false,
+    };
+  }).filter(Boolean);
+
+  return [...serverMapped, ...localOnly];
 }
 
 async function loadCatalog() {
@@ -598,14 +605,34 @@ async function loadSelectBooks(selId) {
 
 async function doTransfer(btn) {
   const licenseId = document.getElementById("transfer-token-select").value;
-  const toAddr    = transferMode === "wallet"
-    ? document.getElementById("transfer-wallet").value.trim()
-    : document.getElementById("transfer-username").value.trim();
 
   if (!licenseId) return msg("transfer-msg", "Selecione uma licença.", "error");
-  if (!toAddr)    return msg("transfer-msg", "Informe o endereço Ethereum do destinatário.", "error");
-  if (!/^0x[0-9a-fA-F]{40}$/i.test(toAddr))
-    return msg("transfer-msg", "Endereço inválido. Informe um endereço Ethereum no formato 0x... (42 caracteres).", "error");
+
+  let toAddr;
+  if (transferMode === "wallet") {
+    toAddr = document.getElementById("transfer-wallet").value.trim();
+    if (!toAddr)
+      return msg("transfer-msg", "Informe o endereço Ethereum do destinatário.", "error");
+    if (!/^0x[0-9a-fA-F]{40}$/i.test(toAddr))
+      return msg("transfer-msg", "Endereço inválido. Informe um endereço Ethereum no formato 0x... (42 caracteres).", "error");
+  } else {
+    // Modo username: busca o endereço pelo nome cadastrado na DRM API
+    const username = document.getElementById("transfer-username").value.trim();
+    if (!username)
+      return msg("transfer-msg", "Informe o nome de usuário do destinatário.", "error");
+    msg("transfer-msg", "⏳ Buscando endereço do destinatário...", "info");
+    try {
+      const res = await fetch(`${window.DLM?.API_BASE || 'https://dlm-pdf-server-production.up.railway.app/api/v1'}/users/by-username/${encodeURIComponent(username)}`);
+      if (!res.ok) throw new Error("Usuário não encontrado.");
+      const data = await res.json();
+      toAddr = data.address || data.wallet;
+      if (!toAddr || !/^0x[0-9a-fA-F]{40}$/i.test(toAddr))
+        throw new Error("Endereço retornado pelo servidor é inválido.");
+    } catch (e) {
+      return msg("transfer-msg", `Erro ao buscar destinatário: ${e.message}. Use a aba "Por Chave Pública (Wallet)" com o endereço Ethereum diretamente.`, "error");
+    }
+  }
+
   if (toAddr.toLowerCase() === me.wallet.toLowerCase())
     return msg("transfer-msg", "Não é possível transferir para você mesmo.", "error");
   if (!confirm("Confirma a transferência? Você perderá o acesso ao livro.")) return;
