@@ -75,23 +75,32 @@ O frontend é **HTML + Vanilla JS puro** (sem bundler). Cada página fica em `pa
 
 | Arquivo | Responsabilidade |
 |---------|-----------------|
-| `index.html` | Shell principal, navbar e roteamento |
-| `pages/catalog.html` | Catálogo de livros disponíveis |
-| `pages/livro.html` | Página do livro + leitor DRM |
-| `pages/biblioteca.html` | Biblioteca do usuário autenticado |
-| `pages/publisher.html` | Painel do publisher (cadastro de livros) |
-| `pages/auth.html` | Login/cadastro via MetaMask |
+| `index.html` | SPA principal — abas Minha Biblioteca / Transferir / Adicionar Livro |
+| `pages/biblioteca.html` | Biblioteca do usuário — lista livros da blockchain + leitor DLM integrado |
+| `pages/publisher.html` | Painel do publisher (upload PDF → encrypt → download .dlm) |
+| `pages/auth.html` | Login/cadastro via MetaMask + modal de cadastro DRM (nome+CPF) |
+| `pages/catalog.html` | Catálogo geral (legado — mantido mas não é o foco atual) |
+| `pages/livro.html` | Página de detalhe do livro (legado) |
 | `css/style.css` | Design system completo |
 | `js/api.js` | Cliente da API — **único lugar para trocar a URL do servidor** |
 | `js/app.js` | Utilitários globais (toast, delay, formatação) |
 
-### Modo demo (sem blockchain)
+### Leitor DLM integrado (`pages/biblioteca.html`)
+O botão **📖 Ler** na biblioteca abre o PDF diretamente na página:
+1. Usuário seleciona o arquivo `.dlm` (seletor de arquivo nativo)
+2. MetaMask assina a mensagem `DLM:decrypt:{licenseId}:{timestamp}`
+3. `APIDLM.decrypt()` valida posse na API (cadeia de custódia) e retorna `pdfBase64`
+4. PDF.js renderiza o PDF em canvas em overlay fullscreen
+- Depende de MetaMask — sem MetaMask o botão mostra aviso
+- PDF.js CDN: `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js`
+
+### Modo demo / fallback (sem blockchain)
 `js/api.js` usa `localStorage` como fallback quando a API não responde:
-- Catálogo: `dlm_books_catalog` no localStorage (vazio por padrão — livros publicados pelo publisher)
-- Livros com IDs 1–6 são legados (hardcoded antigos) e removidos automaticamente pelo `getAll()`
+- Catálogo: `dlm_books_catalog` no localStorage (vazio por padrão)
 - Licenças: `dlm_my_licenses` no localStorage
 - Sessão: `dlm_token` e `dlm_address` no localStorage
-- `biblioteca.html` carrega primeiro via `APIDLM.busca(address)` (blockchain); usa localStorage como fallback
+- `biblioteca.html` e `index.html`: busca blockchain-first via `APIDLM.busca()`; resultados positivos são cacheados em `dlm_busca_cache_{wallet}`; Railway reinicia → usa cache como fallback (não depende de exceção)
+- `dlm_address` é salvo no login (`dlmAuth` no `index.html` e `Auth.save()` em `api.js`) para que `Auth.getAddress()` funcione em todas as páginas
 
 ### Smart Contract (`DLMBookstore.sol`)
 ERC-721 Ownable. Cada cópia de livro é um NFT transferível. Funções principais:
@@ -246,26 +255,24 @@ npm test
 **Sempre que houver qualquer alteração no projeto, realizar o commit imediatamente após a mudança.**
 Não acumular alterações sem commitar. Cada conjunto de mudanças relacionadas deve ter seu próprio commit descritivo antes de continuar.
 
-## Features Planejadas (não implementar sem ordem explícita)
+## Status das Features Implementadas
 
-### Sistema de Transferência de Posse com Identificação por Nome
+### ✅ Implementado
 
-1. **Cadastro de nome no login** — ao entrar com MetaMask em `pages/auth.html`, solicitar nome completo do usuário. Salvar via `registerUser(username)` no contrato ou em banco local vinculado ao endereço. Sem nome cadastrado não pode transferir.
+| Feature | Arquivo | Detalhe |
+|---------|---------|---------|
+| Cadastro de nome+CPF no login | `pages/auth.html` + `index.html` | Modal DRM obrigatório; salvo via `APIDLM.registerUser()` |
+| Biblioteca lista livros da blockchain | `pages/biblioteca.html` + `index.html` | `APIDLM.busca()` + cache `dlm_busca_cache_{wallet}` + fallback localStorage |
+| Leitor DLM integrado na biblioteca | `pages/biblioteca.html` | Seleção .dlm → MetaMask sign → `APIDLM.decrypt()` → PDF.js |
+| Transferência com nome do destinatário | `pages/biblioteca.html` + `index.html` | `APIDLM.previewTransfer()` → confirma nome → `APIDLM.transfer()` |
+| Re-encriptação automática no decrypt | DLM PDF API `POST /decrypt` | Servidor re-cifra para o novo dono e atualiza `encryptedWithAddress` |
+| DLM-PDF Platform verifica posse | `DLM PDF API/client/index.html` | Usa `POST /decrypt` — servidor verifica `currentOwner` no registro |
+| Cadeia de custódia no decrypt | DLM PDF API `decryptDLMv3WithChain` | Tenta encryptedWithAddress + histórico reverso |
 
-2. **Biblioteca lista livros da carteira** — `pages/biblioteca.html` deve buscar todos os tokens ERC-721 do endereço conectado via `contract.userTokens(address)` e exibir com título, capa e opções (Ler / Transferir / Vender).
+### Features Planejadas (não implementar sem ordem explícita)
 
-3. **Transferência exige nome do destinatário visível** — ao iniciar transferência, o remetente informa o endereço Ethereum do destinatário; o sistema busca e exibe o **nome completo cadastrado** desse endereço para confirmação. Sem nome cadastrado do destinatário, a transferência é bloqueada.
+1. **Transferência do NFT na blockchain** — acionar `transferToUser(tokenId, newOwnerAddress)` no contrato ERC-721 após a transferência no registro DRM. Atualmente a transferência só atualiza o `licenseRegistry` da API, não o NFT on-chain.
 
-4. **Re-encriptação na transferência** — o servidor gera novo `.dlm` com `ownerAddress` do destinatário (nova chave HKDF). O `.dlm` antigo é invalidado. O novo arquivo é baixado automaticamente para ser entregue ao destinatário fora da plataforma (e-mail, mensagem).
+2. **Download automático do .dlm re-encriptado** — após o novo dono abrir o arquivo via `APIDLM.decrypt()`, o servidor retorna o `.dlmBase64` atualizado; o cliente deve oferecer download automático do novo arquivo para o usuário guardar localmente.
 
-5. **Transferência do NFT na blockchain** — após a re-encriptação, acionar `transferToUser(tokenId, newOwnerAddress)` no contrato para transferir o NFT. As duas ações (re-encriptar + transferir NFT) devem ser atômicas ou com rollback claro se uma falhar.
-
-6. **DLM-PDF Platform verifica cadeia** — se `ownerAddress` do `.dlm` não bate com a carteira atual, o sistema consulta o servidor/blockchain: se há transferência registrada, oferece re-encriptar para o novo dono; caso contrário, nega acesso.
-
-**Arquivos a modificar**:
-- `pages/auth.html` — adicionar campo de nome no cadastro
-- `pages/biblioteca.html` — listar tokens do contrato, botão Transferir com modal de nome
-- `server.js` — rota `POST /api/reencrypt` (valida assinatura do dono atual, re-encripta para novo dono)
-- `server.js` — rota `GET /api/users/:address` (retorna nome pelo endereço)
-- `DLMBookstore.sol` — `getUserByAddress(address)` retornando UserProfile
-- `DLM-PDF Platform / js/reader.js` — verificação de cadeia de custódia ao abrir .dlm
+3. **Atualização do cache após transferência** — ao concluir uma transferência, remover o livro do `dlm_busca_cache_{wallet}` do cedente para evitar que ele ainda apareça na biblioteca local.
