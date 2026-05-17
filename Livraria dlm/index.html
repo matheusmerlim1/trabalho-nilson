@@ -157,6 +157,21 @@ input:focus,select:focus{border-color:var(--chain-lt);background:#fff}
   </div>
 </header>
 
+<!-- Modal de registro DRM (nome + CPF) -->
+<div id="drm-reg-modal" style="position:fixed;inset:0;background:rgba(13,13,13,.7);backdrop-filter:blur(3px);z-index:500;display:none;align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:6px;border-top:4px solid var(--gold);box-shadow:0 20px 60px rgba(13,13,13,.3);max-width:420px;width:92%;padding:2rem">
+    <h2 style="font-family:'Playfair Display',serif;font-size:1.3rem;margin-bottom:.5rem">👤 Cadastro na plataforma</h2>
+    <p style="font-size:.82em;color:var(--muted);margin-bottom:1.25rem;line-height:1.6">Para transferir livros, seu nome precisa estar cadastrado. O destinatário verá essas informações antes de aceitar a transferência.</p>
+    <div class="form-group"><label>Nome completo *</label><input type="text" id="drm-name" placeholder="Ex: João Silva" maxlength="80"/></div>
+    <div class="form-group"><label>CPF *</label><input type="text" id="drm-cpf" placeholder="000.000.000-00" maxlength="14"/></div>
+    <div id="drm-reg-msg" style="margin-bottom:.75rem"></div>
+    <div style="display:flex;gap:.75rem">
+      <button class="btn btn-primary" style="flex:1" onclick="confirmDrmReg()">Confirmar cadastro</button>
+      <button class="btn btn-outline" onclick="skipDrmReg()">Pular</button>
+    </div>
+  </div>
+</div>
+
 <!-- Nav -->
 <nav id="main-nav" style="display:none">
   <button class="active" onclick="showPage('catalog',this)">📚 Minha Biblioteca</button>
@@ -324,6 +339,42 @@ function enterApp() {
   document.getElementById("logout-btn").style.display = "inline";
   showPage("catalog");
   loadCatalog();
+  ensureDrmRegistration(me.wallet);
+}
+
+let _drmRegResolve = null;
+
+async function ensureDrmRegistration(address) {
+  try {
+    const user = await window.DLM.APIDLM.lookupUser(address);
+    if (user && user.name) return; // já cadastrado
+  } catch { /* não cadastrado ou API fora */ }
+  // Mostra modal de cadastro (não bloqueia a UI)
+  document.getElementById("drm-reg-modal").style.display = "flex";
+}
+
+async function confirmDrmReg() {
+  const name = document.getElementById("drm-name").value.trim();
+  const cpf  = document.getElementById("drm-cpf").value.replace(/\D/g, '');
+  if (!name || name.length < 3) { msgInline("drm-reg-msg", "Nome precisa ter pelo menos 3 caracteres.", "error"); return; }
+  if (cpf.length < 11)          { msgInline("drm-reg-msg", "CPF inválido — informe os 11 dígitos.", "error"); return; }
+  try {
+    await window.DLM.APIDLM.registerUser(me.wallet, name, cpf);
+    localStorage.setItem('dlm_user_name', name);
+    document.getElementById("drm-reg-modal").style.display = "none";
+  } catch(e) {
+    msgInline("drm-reg-msg", "Erro: " + e.message, "error");
+  }
+}
+
+function skipDrmReg() {
+  document.getElementById("drm-reg-modal").style.display = "none";
+}
+
+function msgInline(id, text, type) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.innerHTML = text ? `<div class="alert alert-${type}" style="font-size:.78em;padding:8px 10px;margin:0">${text}</div>` : "";
 }
 
 function logout() {

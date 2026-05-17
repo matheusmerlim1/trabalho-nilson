@@ -138,12 +138,14 @@
   </div>
 </div>
 
-<!-- Modal de nome de usuário -->
+<!-- Modal de nome de usuário + CPF -->
 <div id="name-modal" class="name-modal-overlay" style="display:none" aria-modal="true" role="dialog">
   <div class="name-modal-box">
     <h3>👤 Seu nome na plataforma</h3>
     <p>Para transferir livros, você precisa ter um nome cadastrado. Esse nome será exibido quando alguém receber uma transferência sua.</p>
-    <input type="text" id="name-input" class="name-modal-input" placeholder="Ex: João Silva" maxlength="60"/>
+    <input type="text" id="name-input" class="name-modal-input" placeholder="Nome completo — Ex: João Silva" maxlength="60"/>
+    <input type="text" id="cpf-input" class="name-modal-input" placeholder="CPF — Ex: 000.000.000-00" maxlength="14"/>
+    <div id="name-modal-err" style="font-size:.78em;color:#8b2020;margin-bottom:.5rem;display:none"></div>
     <div class="name-modal-actions">
       <button class="btn btn-primary" id="btn-name-confirm">Confirmar</button>
       <button class="btn btn-ghost" id="btn-name-cancel">Cancelar</button>
@@ -181,29 +183,33 @@ function fakeJWT(addr){
 
 function showNameModal() {
   return new Promise((resolve, reject) => {
-    const modal = document.getElementById('name-modal');
-    const input = document.getElementById('name-input');
-    input.value = '';
+    const modal    = document.getElementById('name-modal');
+    const nameInp  = document.getElementById('name-input');
+    const cpfInp   = document.getElementById('cpf-input');
+    const errEl    = document.getElementById('name-modal-err');
+    nameInp.value = ''; cpfInp.value = ''; errEl.style.display = 'none';
     modal.style.display = 'flex';
-    setTimeout(() => input.focus(), 50);
+    setTimeout(() => nameInp.focus(), 50);
 
     document.getElementById('btn-name-confirm').onclick = () => {
-      const name = input.value.trim();
-      if (name.length < 3) { toast('Nome deve ter pelo menos 3 caracteres.', 'err'); return; }
+      const name = nameInp.value.trim();
+      const cpf  = cpfInp.value.replace(/\D/g, '');
+      if (name.length < 3) { errEl.textContent = 'Nome deve ter pelo menos 3 caracteres.'; errEl.style.display = 'block'; return; }
+      if (cpf.length < 11) { errEl.textContent = 'CPF inválido — informe os 11 dígitos.'; errEl.style.display = 'block'; return; }
       modal.style.display = 'none';
-      resolve(name);
+      resolve({ name, cpf });
     };
     document.getElementById('btn-name-cancel').onclick = () => {
       modal.style.display = 'none';
-      reject(new Error('Nome é obrigatório para usar a plataforma.'));
+      reject(new Error('Cadastro é obrigatório para usar a plataforma.'));
     };
-    input.onkeydown = e => { if (e.key === 'Enter') document.getElementById('btn-name-confirm').click(); };
+    nameInp.onkeydown = e => { if (e.key === 'Enter') cpfInp.focus(); };
+    cpfInp.onkeydown  = e => { if (e.key === 'Enter') document.getElementById('btn-name-confirm').click(); };
   });
 }
 
 async function ensureUserName(addr) {
-  let name = localStorage.getItem('dlm_user_name');
-  if (name) return name;
+  let savedName = localStorage.getItem('dlm_user_name');
 
   try {
     const user = await APIDLM.lookupUser(addr);
@@ -213,9 +219,10 @@ async function ensureUserName(addr) {
     }
   } catch { /* API unavailable */ }
 
-  name = await showNameModal();
+  if (savedName) return savedName; // já tinha localmente, API fora
 
-  try { await APIDLM.registerUser(addr, name, ''); } catch { /* API unavailable */ }
+  const { name, cpf } = await showNameModal();
+  try { await APIDLM.registerUser(addr, name, cpf); } catch { /* API unavailable */ }
   localStorage.setItem('dlm_user_name', name);
   return name;
 }
