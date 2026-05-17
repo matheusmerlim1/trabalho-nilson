@@ -87,9 +87,11 @@ O frontend é **HTML + Vanilla JS puro** (sem bundler). Cada página fica em `pa
 
 ### Modo demo (sem blockchain)
 `js/api.js` usa `localStorage` como fallback quando a API não responde:
-- Catálogo: `dlm_books_catalog` no localStorage (6 livros padrão)
+- Catálogo: `dlm_books_catalog` no localStorage (vazio por padrão — livros publicados pelo publisher)
+- Livros com IDs 1–6 são legados (hardcoded antigos) e removidos automaticamente pelo `getAll()`
 - Licenças: `dlm_my_licenses` no localStorage
 - Sessão: `dlm_token` e `dlm_address` no localStorage
+- `biblioteca.html` carrega primeiro via `APIDLM.busca(address)` (blockchain); usa localStorage como fallback
 
 ### Smart Contract (`DLMBookstore.sol`)
 ERC-721 Ownable. Cada cópia de livro é um NFT transferível. Funções principais:
@@ -126,15 +128,18 @@ Para trocar os servidores em produção:
 
 ### Métodos DRM disponíveis via `window.DLM.APIDLM`
 
-| Método | Descrição |
-|--------|-----------|
-| `APIDLM.registerUser(address, name, cpf)` | Cadastra usuário |
-| `APIDLM.lookupUser(address)` | Consulta nome+CPF por endereço |
-| `APIDLM.encrypt(pdfBase64, publicKey, userName, userCPF, licenseId?, title?, author?)` | Encripta PDF → .dlm v3 (title e author são embutidos no arquivo se fornecidos) |
-| `APIDLM.decrypt(dlmBase64, publicKey, signature, message)` | Decifra com cadeia de custódia |
-| `APIDLM.busca(publicKey)` | Lista todos os livros (title, author, licenseId) de um endereço |
-| `APIDLM.previewTransfer(toPublicKey, licenseId)` | Consulta destinatário |
-| `APIDLM.transfer(fromKey, toKey, licenseId, sig, msg)` | Executa transferência |
+| Método | Rota no servidor | Descrição |
+|--------|-----------------|-----------|
+| `APIDLM.registerUser(address, name, cpf)` | `POST /users/register` | Cadastra usuário |
+| `APIDLM.lookupUser(address)` | `GET /users/:address` | Consulta nome+CPF por endereço |
+| `APIDLM.encrypt(pdfBase64, publicKey, userName, userCPF, licenseId?, title?, author?)` | `POST /encrypt` | Encripta PDF → .dlm v3 (title e author são embutidos no arquivo se fornecidos) |
+| `APIDLM.decrypt(dlmBase64, publicKey, signature, message)` | `POST /decrypt` | Decifra com cadeia de custódia |
+| `APIDLM.busca(publicKey)` | `GET /busca?publicKey=` | Lista todos os livros (licenseId, title, author) cujo currentOwner é publicKey |
+| `APIDLM.previewTransfer(toPublicKey, licenseId)` | `POST /transfer/preview` | Consulta destinatário |
+| `APIDLM.transfer(fromKey, toKey, licenseId, sig, msg)` | `POST /transfer` | Executa transferência |
+
+Endpoint extra (consulta pública de posse):
+- `GET /licenses/public/:id` — retorna `{ licenseId, currentOwner: { address }, transferCount, createdAt }`
 
 O servidor (`server.js`) também expõe rotas proxy em `/api/drm/*` para operações que precisam
 combinar DRM + blockchain (ex.: transferência que atualiza DRM + NFT on-chain).
@@ -183,9 +188,9 @@ Claude Code também sincroniza ao encerrar a sessão via hook `Stop` em `.claude
 | Item | Versão atual | O que checar |
 |------|-------------|--------------|
 | Formato `.dlm` | **v3** | Nenhum arquivo deve gerar v1 ou v2; `APIDLM.encrypt` é a única rota de encriptação |
-| `js/api.js` | **?v=3** (cache-busting) | Todas as páginas HTML devem carregar com `<script src="../js/api.js?v=3">` |
-| `js/app.js` | **?v=3** (cache-busting) | Idem — `<script src="../js/app.js?v=3">` |
-| `css/style.css` | **?v=3** (cache-busting) | `<link rel="stylesheet" href="../css/style.css?v=3">` |
+| `js/api.js` | **?v=6** (cache-busting) | Todas as páginas HTML devem carregar com `<script src="../js/api.js?v=6">` |
+| `js/app.js` | **?v=6** (cache-busting) | Idem — `<script src="../js/app.js?v=6">` |
+| `css/style.css` | **?v=6** (cache-busting) | `<link rel="stylesheet" href="../css/style.css?v=6">` |
 | Endpoint de encriptação | **`APIDLM.encrypt`** | Nenhum código deve chamar rotas `/encrypt` legadas (v1/v2) diretamente |
 
 ### Como verificar
