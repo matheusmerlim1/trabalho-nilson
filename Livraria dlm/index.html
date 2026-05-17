@@ -159,11 +159,9 @@ input:focus,select:focus{border-color:var(--chain-lt);background:#fff}
 
 <!-- Nav -->
 <nav id="main-nav" style="display:none">
-  <button class="active" onclick="showPage('catalog',this)">📚 Catálogo</button>
-  <button onclick="showPage('mybooks',this)">📖 Minha Biblioteca</button>
-  <button onclick="showPage('marketplace',this)">🔄 Marketplace C2C</button>
+  <button class="active" onclick="showPage('catalog',this)">📚 Minha Biblioteca</button>
   <button onclick="showPage('transfer',this)">↗️ Transferir / Vender</button>
-  <button onclick="showPage('admin',this)">🔧 Admin</button>
+  <button onclick="showPage('admin',this)">📝 Adicionar Livro</button>
 </nav>
 
 <main>
@@ -207,37 +205,16 @@ input:focus,select:focus{border-color:var(--chain-lt);background:#fff}
   </div>
 </div>
 
-<!-- ── CATALOG ────────────────────────────────────────────────────────────── -->
+<!-- ── CATALOG (Minha Biblioteca) ─────────────────────────────────────────── -->
 <div id="page-catalog" class="page">
   <div class="section-header">
-    <h2 class="section-title">Catálogo de Livros</h2>
+    <h2 class="section-title">Minha Biblioteca</h2>
     <button class="btn btn-outline btn-sm" onclick="loadCatalog()">↻ Atualizar</button>
   </div>
   <div id="catalog-msg"></div>
   <div id="catalog-grid" class="book-grid">
     <div class="empty-state"><div class="empty-icon">⏳</div>Carregando...</div>
   </div>
-</div>
-
-<!-- ── MY BOOKS ───────────────────────────────────────────────────────────── -->
-<div id="page-mybooks" class="page">
-  <div class="section-header">
-    <h2 class="section-title">Minha Biblioteca</h2>
-    <button class="btn btn-outline btn-sm" onclick="loadMyBooks()">↻ Atualizar</button>
-  </div>
-  <div id="mybooks-msg"></div>
-  <div id="mybooks-list"><div class="empty-state"><div class="empty-icon">⏳</div>Carregando...</div></div>
-</div>
-
-<!-- ── MARKETPLACE ────────────────────────────────────────────────────────── -->
-<div id="page-marketplace" class="page">
-  <div class="section-header">
-    <h2 class="section-title">Marketplace C2C</h2>
-    <button class="btn btn-outline btn-sm" onclick="loadMarketplace()">↻ Atualizar</button>
-  </div>
-  <div class="info-box"><strong>Revenda entre usuários.</strong> 90% do valor vai ao vendedor · 10% de taxa à DLM · Posse transferida via NFT na blockchain.</div>
-  <div id="marketplace-msg"></div>
-  <div id="marketplace-list"><div class="empty-state"><div class="empty-icon">⏳</div>Carregando...</div></div>
 </div>
 
 <!-- ── TRANSFER / SELL ─────────────────────────────────────────────────────── -->
@@ -285,7 +262,7 @@ input:focus,select:focus{border-color:var(--chain-lt);background:#fff}
 <!-- ── ADMIN ──────────────────────────────────────────────────────────────── -->
 <div id="page-admin" class="page">
   <div style="max-width:620px">
-    <h2 class="section-title" style="margin-bottom:1.5rem">🔧 Painel Admin</h2>
+    <h2 class="section-title" style="margin-bottom:1.5rem">📝 Adicionar Livro</h2>
     <div class="info-box">
       <strong>Adicionar Livro com PDF.</strong> O PDF será <strong>cifrado com AES-256-CBC</strong> no servidor imediatamente após o upload. 
       Somente o arquivo cifrado (<code>.dlmpdf</code>) é salvo em disco. A chave AES fica em <code>storage/keys/</code> e nunca é exposta.
@@ -300,7 +277,6 @@ input:focus,select:focus{border-color:var(--chain-lt);background:#fff}
         <input type="text" id="admin-isbn" placeholder="978-85-1234-567-8"/>
         <small style="color:var(--muted);font-size:.72em;margin-top:4px;display:block">ISBN é o código internacional que identifica o livro (13 dígitos, ex: 978-85-...). Deixe em branco se não tiver.</small>
       </div>
-      <div class="form-group"><label>Preço (ETH)</label><input type="number" id="admin-price" placeholder="0.01" step="0.001" min="0.001"/></div>
       <div class="form-group">
         <label>Arquivo PDF</label>
         <input type="file" id="admin-pdf" accept="application/pdf"/>
@@ -361,8 +337,7 @@ function showPage(name, btn) {
   document.querySelectorAll("nav button").forEach(b => b.classList.remove("active"));
   document.getElementById("page-"+name).classList.add("active");
   if (btn) btn.classList.add("active");
-  if (name === "mybooks") loadMyBooks();
-  if (name === "marketplace") loadMarketplace();
+  if (name === "catalog") loadCatalog();
   if (name === "transfer") { loadSelectBooks("transfer-token-select"); loadSelectBooks("resale-token-select"); }
 }
 
@@ -448,19 +423,56 @@ async function doRegister(btn) {
   loading(btn, false);
 }
 
-// ── Catalog ────────────────────────────────────────────────────────────────
+// ── Minha Biblioteca — livros em posse do usuário ─────────────────────────
+async function getUserBooks() {
+  const COLORS = ['#1e3a5f','#78350f','#3b0764','#1c1917','#7c3aed','#15803d'];
+  try {
+    const result = await window.DLM.APIDLM.busca(me.wallet);
+    const chainBooks = result.books || [];
+    const localLics  = window.DLM.APILicenses.getMyLicenses();
+    return chainBooks.map(cb => {
+      const localLic  = localLics.find(l => String(l.licenseId) === String(cb.licenseId));
+      const localBook = localLic ? window.DLM.APIBooks.getById(localLic.bookId) : null;
+      const seed = String(cb.licenseId).split('').reduce((a,c) => a + c.charCodeAt(0), 0);
+      return {
+        licenseId: String(cb.licenseId),
+        bookId:    localLic?.bookId || null,
+        title:     cb.title  || localBook?.title  || 'Sem título',
+        author:    cb.author || localBook?.author || '—',
+        color:     localBook?.color || COLORS[Math.abs(seed) % COLORS.length],
+        fromChain: true,
+      };
+    });
+  } catch {
+    const localLics = window.DLM.APILicenses.getMyLicenses();
+    const COLORS2 = ['#1e3a5f','#78350f','#3b0764'];
+    return localLics.map(lic => {
+      const book = window.DLM.APIBooks.getById(lic.bookId);
+      if (!book) return null;
+      return {
+        licenseId: String(lic.licenseId),
+        bookId:    String(lic.bookId),
+        title:     book.title,
+        author:    book.author,
+        color:     book.color || COLORS2[book.id % COLORS2.length],
+        fromChain: false,
+      };
+    }).filter(Boolean);
+  }
+}
+
 async function loadCatalog() {
   const g = document.getElementById("catalog-grid");
-  g.innerHTML = `<div class="empty-state"><div class="empty-icon">⏳</div>Carregando...</div>`;
-  const books = window.DLM?.APIBooks.getAll() || [];
-  if (!books.length) {
-    g.innerHTML = `<div class="empty-state"><div class="empty-icon">📚</div>Nenhum livro no catálogo.</div>`; return;
-  }
-  g.innerHTML = books.map(b => {
-    const owned = window.DLM?.APILicenses.hasLicense(b.id);
-    return `
+  g.innerHTML = `<div class="empty-state"><div class="empty-icon">⏳</div>Carregando sua biblioteca...</div>`;
+  try {
+    const books = await getUserBooks();
+    if (!books.length) {
+      g.innerHTML = `<div class="empty-state"><div class="empty-icon">📚</div><p>Nenhum livro em sua biblioteca.</p><p style="font-size:.82em;margin-top:.5rem">Adicione um livro na aba <strong>Adicionar Livro</strong>.</p></div>`;
+      return;
+    }
+    g.innerHTML = books.map(b => `
       <div class="book-card">
-        <div class="book-cover" style="background:${b.color||'#1e3a5f'}">
+        <div class="book-cover" style="background:${b.color}">
           <div class="book-cover-inner">
             <div class="cover-title">${b.title}</div>
             <div class="cover-author">${b.author}</div>
@@ -468,57 +480,30 @@ async function loadCatalog() {
           <div class="book-cover-accent"></div>
         </div>
         <div class="book-info">
-          <div class="book-id">${b.genre} · ${b.pages} pág. · ${b.year}</div>
-          <div class="book-price">R$ ${b.price.toFixed(2).replace('.',',')} ${owned?'<span class="tag tag-owned">✓ Seu</span>':''}</div>
+          <div class="book-id">Licença #${b.licenseId}</div>
+          <div class="book-price"><span class="tag tag-owned">✓ Em posse</span></div>
           <div class="book-actions">
-            ${owned
-              ? `<button class="btn btn-success btn-sm" disabled>✓ Adquirido</button>`
-              : `<button class="btn btn-primary btn-sm" onclick="buyBook(${b.id},'${b.title.replace(/'/g,"\\'")}',${b.licenseId})">Comprar</button>`}
+            <button class="btn btn-chain btn-sm" onclick="readBook('${b.licenseId}','${b.title.replace(/'/g,"\\'")}')">📖 Verificar acesso</button>
+            <button class="btn btn-gold btn-sm" onclick="goTransferByLicense('${b.licenseId}')">↗️ Transferir</button>
           </div>
         </div>
-      </div>`;
-  }).join("");
-}
-
-async function buyBook(bookId, title, licenseId) {
-  if (!confirm(`Comprar "${title}"?\nUma licença será emitida para sua carteira na blockchain.`)) return;
-  msg("catalog-msg", `⏳ Processando compra de "${title}"...`, "info");
-  try {
-    const res = await apiCall(`/publisher/books/${bookId}/mint`, {
-      method: 'POST', body: JSON.stringify({ buyerAddress: me.wallet })
-    });
-    const newLicenseId = res.licenseId || licenseId;
-    window.DLM?.APILicenses.addLicense(bookId, newLicenseId);
-    msg("catalog-msg",
-      `✅ "${title}" adquirido! Licença #${newLicenseId} · Tx: <span class="tx-hash">${res.txHash||'demo'}</span>`,
-      "success");
-    loadCatalog();
-  } catch(e) { msg("catalog-msg", "Erro na compra: " + e.message, "error"); }
-}
-
-// ── My Books ───────────────────────────────────────────────────────────────
-async function loadMyBooks() {
-  const l = document.getElementById("mybooks-list");
-  l.innerHTML = `<div class="empty-state"><div class="empty-icon">⏳</div>Carregando...</div>`;
-  const licenses = window.DLM?.APILicenses.getMyLicenses() || [];
-  if (!licenses.length) {
-    l.innerHTML = `<div class="empty-state"><div class="empty-icon">📖</div>Nenhum livro na sua biblioteca.<br/><small style="font-size:.8em">Compre um livro no Catálogo.</small></div>`; return;
+      </div>`).join('');
+  } catch(e) {
+    msg("catalog-msg", "Erro ao carregar biblioteca: " + e.message, "error");
+    g.innerHTML = '';
   }
-  l.innerHTML = licenses.map(lic => {
-    const book = window.DLM?.APIBooks.getById(lic.bookId) || { title: 'Livro #'+lic.bookId, author: '—' };
-    return `
-      <div class="my-book-item">
-        <div>
-          <div class="my-book-title">${book.title} <span class="tag tag-owned">Em posse</span> <span class="tag tag-drm">🔐 DLM</span></div>
-          <div class="my-book-meta">Autor: ${book.author} · Licença #${lic.licenseId} · Adquirido: ${new Date(lic.purchasedAt).toLocaleDateString('pt-BR')}</div>
-        </div>
-        <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
-          <button class="btn btn-chain btn-sm" onclick="readBook(${lic.licenseId},'${book.title.replace(/'/g,"\\'")}')">📖 Verificar acesso</button>
-          <button class="btn btn-outline btn-sm" onclick="viewHistory('${lic.licenseId}')">🔗 On-chain</button>
-          <button class="btn btn-gold btn-sm" onclick="goTransfer(${lic.licenseId})">Transferir</button>
-        </div>
-      </div>`;
-  }).join("");
+}
+
+function goTransferByLicense(licenseId) {
+  showPage("transfer");
+  document.querySelectorAll("nav button")[1].classList.add("active");
+  loadSelectBooks("transfer-token-select").then(() => {
+    const s = document.getElementById("transfer-token-select");
+    for (const o of s.options) {
+      if (o.value === String(licenseId)) { s.value = String(licenseId); break; }
+    }
+  });
+  loadSelectBooks("resale-token-select");
 }
 
 // ── PDF DRM Reader ─────────────────────────────────────────────────────────
@@ -562,21 +547,9 @@ async function viewHistory(licenseId) {
 }
 
 function goTransfer(licenseId) {
-  showPage("transfer");
-  document.querySelectorAll("nav button")[3].classList.add("active");
-  setTimeout(() => {
-    const s = document.getElementById("transfer-token-select");
-    for (let o of s.options) if (o.value == licenseId) { s.value = licenseId; break; }
-  }, 400);
+  goTransferByLicense(licenseId);
 }
 
-// ── Marketplace ────────────────────────────────────────────────────────────
-async function loadMarketplace() {
-  const l = document.getElementById("marketplace-list");
-  l.innerHTML = `<div class="empty-state"><div class="empty-icon">🔄</div>Marketplace C2C em breve.<br/><small style="font-size:.8em">A revenda entre usuários estará disponível on-chain via contrato inteligente.</small></div>`;
-}
-
-async function buyResale(tokenId, title, price) {}
 
 // ── Transfer ───────────────────────────────────────────────────────────────
 function switchTab(mode) {
@@ -589,12 +562,12 @@ function switchTab(mode) {
 
 async function loadSelectBooks(selId) {
   const sel = document.getElementById(selId);
-  const licenses = window.DLM?.APILicenses.getMyLicenses() || [];
-  if (!licenses.length) { sel.innerHTML=`<option value="">Nenhum livro</option>`; return; }
-  sel.innerHTML = `<option value="">— selecione —</option>` + licenses.map(lic => {
-    const book = window.DLM?.APIBooks.getById(lic.bookId) || {};
-    return `<option value="${lic.licenseId}">Licença #${lic.licenseId} — ${book.title||'Livro #'+lic.bookId}</option>`;
-  }).join("");
+  sel.innerHTML = `<option value="">⏳ carregando...</option>`;
+  const books = await getUserBooks();
+  if (!books.length) { sel.innerHTML = `<option value="">Nenhum livro em sua posse</option>`; return; }
+  sel.innerHTML = `<option value="">— selecione —</option>` + books.map(b =>
+    `<option value="${b.licenseId}">Licença #${b.licenseId} — ${b.title}</option>`
+  ).join('');
 }
 
 async function doTransfer(btn) {
@@ -625,14 +598,13 @@ async function doCancelResale(btn) {
   msg("resale-msg","⚠️ Cancelamento disponível em breve.","info");
 }
 
-// ── Admin ──────────────────────────────────────────────────────────────────
+// ── Adicionar Livro ────────────────────────────────────────────────────────
 async function doAddBook(btn) {
   const title  = document.getElementById("admin-title").value.trim();
   const author = document.getElementById("admin-author").value.trim();
   const isbn   = document.getElementById("admin-isbn").value.trim();
-  const price  = document.getElementById("admin-price").value;
   const file   = document.getElementById("admin-pdf").files[0];
-  if (!title||!author||!price||!file) return msg("admin-msg","Preencha todos os campos e selecione um PDF.","error");
+  if (!title || !author || !file) return msg("admin-msg","Preencha título, autor e selecione um PDF.","error");
   loading(btn, true);
   msg("admin-msg","⏳ Registrando na blockchain e cifrando PDF com AES-256...","info");
   try {
@@ -641,7 +613,7 @@ async function doAddBook(btn) {
       body: JSON.stringify({ title, author, contentHash: '0x'+Array.from({length:64},()=>'0123456789abcdef'[Math.floor(Math.random()*16)]).join(''), royaltyBps: 500 })
     });
     const bookId = regRes.bookId || Date.now();
-    const pdfBase64 = await new Promise((res,rej)=>{
+    const pdfBase64 = await new Promise((res,rej) => {
       const reader = new FileReader();
       reader.onload = e => {
         const bytes = new Uint8Array(e.target.result);
@@ -669,14 +641,17 @@ async function doAddBook(btn) {
       a.click();
       URL.revokeObjectURL(url);
     }
-    const books = window.DLM?.APIBooks.getAll() || [];
-    books.unshift({ id: bookId, title, author, description: isbn||'', price: parseFloat(price), genre: 'Novo', pages: 0, year: new Date().getFullYear(), emoji: '📘', color: '#1e3a5f', available: true, licenseId: bookId });
-    window.DLM?.APIBooks.save(books);
+    const book = window.DLM.APIBooks.add({ title, author, description: isbn||'', genre: 'Livro', pages: 0, year: new Date().getFullYear(), emoji: '📘', color: '#1e3a5f', available: true, licenseId: bookId });
+    window.DLM.APILicenses.addLicense(book.id, String(bookId));
     msg("admin-msg",
-      `✅ Livro #${bookId} cadastrado! PDF cifrado AES-256.<br/>
+      `✅ Livro cadastrado e adicionado à sua biblioteca!<br/>
        ${encRes.dlmBase64 ? '📥 Arquivo .dlm baixado automaticamente.<br/>' : ''}
        Hash: <span class="tx-hash">${encRes.contentHash||'—'}</span><br/>
        Tx: <span class="tx-hash">${regRes.txHash||'demo'}</span>`, "success");
+    document.getElementById("admin-title").value = '';
+    document.getElementById("admin-author").value = '';
+    document.getElementById("admin-isbn").value = '';
+    document.getElementById("admin-pdf").value = '';
   } catch(e) { msg("admin-msg","Erro: "+e.message,"error"); }
   loading(btn, false);
 }

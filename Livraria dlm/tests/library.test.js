@@ -48,25 +48,26 @@ function makeAPILicenses(ls) {
 
 function makeAPIBooks(ls) {
   const KEY = 'dlm_books_catalog';
+  let _seq = 1716000000000;
   return {
     getAll() {
       const stored = ls.getItem(KEY);
       if (!stored) return [];
-      const books = JSON.parse(stored);
-      // Remove livros hardcoded antigos (IDs 1-6); livros reais usam Date.now() como ID
-      const cleaned = books.filter(b => Number(b.id) > 6);
-      if (cleaned.length !== books.length) ls.setItem(KEY, JSON.stringify(cleaned));
-      return cleaned;
+      return JSON.parse(stored);
     },
     getById(id) {
       return this.getAll().find(b => String(b.id) === String(id)) || null;
     },
     add(book) {
       const books = this.getAll();
-      book.id = Date.now();
+      book.id = _seq++;
       books.unshift(book);
       ls.setItem(KEY, JSON.stringify(books));
       return book;
+    },
+    remove(id) {
+      const books = this.getAll().filter(b => String(b.id) !== String(id));
+      ls.setItem(KEY, JSON.stringify(books));
     },
   };
 }
@@ -188,18 +189,28 @@ describe('APIBooks.getById após addLicense (integração local)', () => {
     expect(apiBooks.getAll()).toEqual([]);
   });
 
-  test('migração: livros com IDs 1-6 (antigos defaults) são removidos do localStorage', () => {
+  test('remove() exclui apenas o livro com o ID informado', () => {
+    const b1 = apiBooks.add({ title: 'Livro A', author: 'A', price: 10 });
+    const b2 = apiBooks.add({ title: 'Livro B', author: 'B', price: 20 });
+    apiBooks.remove(b1.id);
+    const remaining = apiBooks.getAll();
+    expect(remaining).toHaveLength(1);
+    expect(remaining[0].title).toBe('Livro B');
+  });
+
+  test('livros com qualquer ID (inclusive pequenos) são preservados — sem filtro automático', () => {
     const KEY = 'dlm_books_catalog';
-    const legacyBooks = [
-      { id: 1, title: 'O Senhor dos Anéis', author: 'Tolkien', price: 39.9 },
-      { id: 2, title: 'Duna', author: 'Herbert', price: 34.9 },
-      { id: 1716000000000, title: 'Livro Real', author: 'Autor', price: 20 },
+    const books = [
+      { id: 1, title: 'Livro ID Pequeno', author: 'Autor A', price: 39.9 },
+      { id: 2, title: 'Outro ID Pequeno', author: 'Autor B', price: 34.9 },
+      { id: 1716000000000, title: 'Livro ID Timestamp', author: 'Autor C', price: 20 },
     ];
-    ls.setItem(KEY, JSON.stringify(legacyBooks));
+    ls.setItem(KEY, JSON.stringify(books));
 
     const result = apiBooks.getAll();
-    expect(result).toHaveLength(1);
-    expect(result[0].title).toBe('Livro Real');
+    expect(result).toHaveLength(3);
+    expect(result.map(b => b.title)).toContain('Livro ID Pequeno');
+    expect(result.map(b => b.title)).toContain('Livro ID Timestamp');
   });
 });
 
