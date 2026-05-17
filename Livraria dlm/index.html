@@ -424,37 +424,46 @@ async function doRegister(btn) {
 }
 
 // ── Minha Biblioteca — livros em posse do usuário ─────────────────────────
+const COLORS = ['#1e3a5f','#78350f','#3b0764','#1c1917','#7c3aed','#15803d'];
+
+function findLocalBook(licenseId) {
+  const localLics = window.DLM.APILicenses.getMyLicenses();
+  const lic = localLics.find(l => String(l.licenseId) === String(licenseId));
+  if (lic) {
+    const book = window.DLM.APIBooks.getById(lic.bookId);
+    if (book) return book;
+  }
+  // Fallback: procura no catálogo pelo campo licenseId salvo no livro
+  return window.DLM.APIBooks.getAll().find(b => String(b.licenseId) === String(licenseId)) || null;
+}
+
 async function getUserBooks() {
-  const COLORS = ['#1e3a5f','#78350f','#3b0764','#1c1917','#7c3aed','#15803d'];
   try {
-    const result = await window.DLM.APIDLM.busca(me.wallet);
+    const result     = await window.DLM.APIDLM.busca(me.wallet);
     const chainBooks = result.books || [];
-    const localLics  = window.DLM.APILicenses.getMyLicenses();
     return chainBooks.map(cb => {
-      const localLic  = localLics.find(l => String(l.licenseId) === String(cb.licenseId));
-      const localBook = localLic ? window.DLM.APIBooks.getById(localLic.bookId) : null;
+      const localBook = findLocalBook(cb.licenseId);
       const seed = String(cb.licenseId).split('').reduce((a,c) => a + c.charCodeAt(0), 0);
       return {
         licenseId: String(cb.licenseId),
-        bookId:    localLic?.bookId || null,
-        title:     cb.title  || localBook?.title  || 'Sem título',
-        author:    cb.author || localBook?.author || '—',
+        title:     cb.title  || localBook?.title  || `Licença #${cb.licenseId}`,
+        author:    cb.author || localBook?.author || '',
         color:     localBook?.color || COLORS[Math.abs(seed) % COLORS.length],
         fromChain: true,
       };
     });
   } catch {
+    // Fallback: localStorage quando API está fora
     const localLics = window.DLM.APILicenses.getMyLicenses();
-    const COLORS2 = ['#1e3a5f','#78350f','#3b0764'];
     return localLics.map(lic => {
-      const book = window.DLM.APIBooks.getById(lic.bookId);
+      const book = window.DLM.APIBooks.getById(lic.bookId)
+        || window.DLM.APIBooks.getAll().find(b => String(b.licenseId) === String(lic.licenseId));
       if (!book) return null;
       return {
         licenseId: String(lic.licenseId),
-        bookId:    String(lic.bookId),
         title:     book.title,
-        author:    book.author,
-        color:     book.color || COLORS2[book.id % COLORS2.length],
+        author:    book.author || '',
+        color:     book.color || COLORS[book.id % COLORS.length],
         fromChain: false,
       };
     }).filter(Boolean);
@@ -475,7 +484,7 @@ async function loadCatalog() {
         <div class="book-cover" style="background:${b.color}">
           <div class="book-cover-inner">
             <div class="cover-title">${b.title}</div>
-            <div class="cover-author">${b.author}</div>
+            <div class="cover-author">${b.author ? 'por ' + b.author : ''}</div>
           </div>
           <div class="book-cover-accent"></div>
         </div>
@@ -483,7 +492,6 @@ async function loadCatalog() {
           <div class="book-id">Licença #${b.licenseId}</div>
           <div class="book-price"><span class="tag tag-owned">✓ Em posse</span></div>
           <div class="book-actions">
-            <button class="btn btn-chain btn-sm" onclick="readBook('${b.licenseId}','${b.title.replace(/'/g,"\\'")}')">📖 Verificar acesso</button>
             <button class="btn btn-gold btn-sm" onclick="goTransferByLicense('${b.licenseId}')">↗️ Transferir</button>
           </div>
         </div>
@@ -506,44 +514,11 @@ function goTransferByLicense(licenseId) {
   loadSelectBooks("resale-token-select");
 }
 
-// ── PDF DRM Reader ─────────────────────────────────────────────────────────
-async function readBook(licenseId, title) {
-  msg("mybooks-msg", `⏳ Verificando titularidade na blockchain para "${title}"...`, "info");
-  try {
-    const res = await window.DLM?.APILicenses.openBook(licenseId);
-    if (res?.granted) {
-      msg("mybooks-msg",
-        `✅ Acesso verificado! Licença #${licenseId} válida.<br/>
-         Para ler o arquivo <code>.dlm</code>, abra o <a href="http://localhost:3001" target="_blank" style="color:var(--chain-lt)">DLM-PDF Reader</a> e selecione o arquivo do livro.<br/>
-         <span class="tx-hash">Tx: ${res.txHash}</span>`,
-        "success");
-    } else {
-      msg("mybooks-msg", "Acesso negado pela blockchain.", "error");
-    }
-  } catch(e) { msg("mybooks-msg", "Erro: " + e.message, "error"); }
-}
-
 function closePdfViewer() {
   document.getElementById("pdf-viewer").classList.remove("open");
   const frame = document.getElementById("pdf-frame");
   if (frame.src) URL.revokeObjectURL(frame.src);
   frame.src = "";
-}
-
-async function viewHistory(licenseId) {
-  try {
-    const res = await fetch(`${RAILWAY}/wallet/${me.wallet}`).then(r=>r.json());
-    const lic = res.licenses?.find(l => String(l.licenseId) === String(licenseId));
-    if (lic) {
-      msg("mybooks-msg",
-        `<strong>🔗 Licença #${licenseId} on-chain:</strong>
-         <div style="font-family:'DM Mono',monospace;font-size:.75em;margin-top:.5rem;line-height:1.8">
-           Dono: ${lic.owner}<br/>Livro ID: #${lic.bookId}<br/>Rede: ${res.blockchain}
-         </div>`, "info");
-    } else {
-      msg("mybooks-msg", `Licença #${licenseId} registrada localmente (modo demo).`, "info");
-    }
-  } catch(e) { msg("mybooks-msg", "Erro ao consultar blockchain: " + e.message, "error"); }
 }
 
 function goTransfer(licenseId) {
@@ -572,21 +547,78 @@ async function loadSelectBooks(selId) {
 
 async function doTransfer(btn) {
   const licenseId = document.getElementById("transfer-token-select").value;
-  const toWallet  = transferMode==="wallet"
+  const toAddr    = transferMode === "wallet"
     ? document.getElementById("transfer-wallet").value.trim()
     : document.getElementById("transfer-username").value.trim();
-  if (!licenseId) return msg("transfer-msg","Selecione uma licença.","error");
-  if (!toWallet)  return msg("transfer-msg","Informe o destinatário.","error");
+
+  if (!licenseId) return msg("transfer-msg", "Selecione uma licença.", "error");
+  if (!toAddr)    return msg("transfer-msg", "Informe o endereço Ethereum do destinatário.", "error");
+  if (!/^0x[0-9a-fA-F]{40}$/i.test(toAddr))
+    return msg("transfer-msg", "Endereço inválido. Informe um endereço Ethereum no formato 0x... (42 caracteres).", "error");
+  if (toAddr.toLowerCase() === me.wallet.toLowerCase())
+    return msg("transfer-msg", "Não é possível transferir para você mesmo.", "error");
   if (!confirm("Confirma a transferência? Você perderá o acesso ao livro.")) return;
+
   loading(btn, true);
+  msg("transfer-msg", "⏳ Verificando destinatário...", "info");
+
   try {
-    const licenses = window.DLM?.APILicenses.getMyLicenses() || [];
-    const idx = licenses.findIndex(l => String(l.licenseId) === String(licenseId));
-    if (idx !== -1) { licenses.splice(idx, 1); localStorage.setItem('dlm_my_licenses', JSON.stringify(licenses)); }
-    const fakeTx = '0x'+Array.from({length:64},()=>'0123456789abcdef'[Math.floor(Math.random()*16)]).join('');
-    msg("transfer-msg", `✅ Transferido! Tx: <span class="tx-hash">${fakeTx}</span>`, "success");
-    loadSelectBooks("transfer-token-select"); loadSelectBooks("resale-token-select");
-  } catch(e) { msg("transfer-msg","Erro: "+e.message,"error"); }
+    const fromKey = me.wallet;
+
+    // Verificar se destinatário está cadastrado na DRM API
+    let recipientName = null;
+    try {
+      const preview = await window.DLM.APIDLM.previewTransfer(toAddr, licenseId);
+      recipientName = preview.newOwner?.name || null;
+    } catch {
+      try {
+        const user = await window.DLM.APIDLM.lookupUser(toAddr);
+        recipientName = user?.name || null;
+      } catch { /* continua sem verificação do nome */ }
+    }
+
+    if (!recipientName) {
+      const continuar = confirm(
+        'Destinatário não encontrado na plataforma DRM.\n\n' +
+        'A transferência continuará apenas na DRM API (se MetaMask disponível).\n\n' +
+        'Continuar mesmo assim?'
+      );
+      if (!continuar) { loading(btn, false); msg("transfer-msg", "", ""); return; }
+    }
+
+    // Assinar e transferir via APIDLM (requer MetaMask)
+    if (window.ethereum) {
+      msg("transfer-msg", "⏳ Aguardando assinatura MetaMask...", "info");
+      const message   = `DLM:transfer:${licenseId}:${Date.now()}`;
+      const signature = await window.ethereum.request({
+        method: 'personal_sign',
+        params: [message, fromKey],
+      });
+      await window.DLM.APIDLM.transfer(fromKey, toAddr, licenseId, signature, message);
+    } else {
+      msg("transfer-msg", "⚠️ MetaMask não detectado — a transferência não foi registrada na blockchain.", "info");
+      await new Promise(r => setTimeout(r, 1500));
+    }
+
+    // Remove da biblioteca local (ambas as chaves)
+    const lics = JSON.parse(localStorage.getItem('dlm_my_licenses') || '[]');
+    localStorage.setItem('dlm_my_licenses', JSON.stringify(
+      lics.filter(l => String(l.licenseId) !== String(licenseId))
+    ));
+
+    const dest = recipientName ? `${recipientName} (${toAddr.slice(0,10)}...)` : toAddr.slice(0,16)+'...';
+    msg("transfer-msg", `✅ Transferência concluída! Licença #${licenseId} enviada para ${dest}.`, "success");
+
+    // Atualiza selects e volta para a biblioteca em 2s
+    await loadSelectBooks("transfer-token-select");
+    await loadSelectBooks("resale-token-select");
+    setTimeout(() => {
+      showPage('catalog', document.querySelector('#main-nav button'));
+    }, 2500);
+
+  } catch(e) {
+    msg("transfer-msg", "Erro: " + e.message, "error");
+  }
   loading(btn, false);
 }
 
