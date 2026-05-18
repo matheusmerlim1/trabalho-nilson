@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-<title>DLM Bookstore — Livraria Digital Blockchain</title>
+<title>📚 DLM Bookstore — Livraria Digital Blockchain</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet"/>
 <link rel="stylesheet" href="css/index.css"/>
@@ -183,7 +183,7 @@
   <iframe class="pdf-frame" id="pdf-frame" title="Leitor DLM"></iframe>
 </div>
 
-<script src="js/api.js?v=9"></script>
+<script src="js/api.js?v=10"></script>
 <script>
 const RAILWAY = 'https://dlm-pdf-server-production.up.railway.app/api/v1';
 
@@ -445,6 +445,7 @@ async function loadCatalog() {
           <div class="book-price"><span class="tag tag-owned">✓ Em posse</span></div>
           <div class="book-actions">
             <button class="btn btn-gold btn-sm" onclick="goTransferByLicense('${b.licenseId}')">↗️ Transferir</button>
+            <button class="btn btn-sm" style="color:var(--red,#e74c3c);border-color:var(--red,#e74c3c)" onclick="deleteBook(${JSON.stringify(b.licenseId)},${JSON.stringify(b.title)})">🗑️ Excluir</button>
           </div>
         </div>
       </div>`).join('');
@@ -464,6 +465,19 @@ function goTransferByLicense(licenseId) {
     }
   });
   loadSelectBooks("resale-token-select");
+}
+
+async function deleteBook(licenseId, title) {
+  if (!confirm(`Excluir "${title || 'este livro'}" da biblioteca?\n\nEsta ação remove o registro do servidor. O arquivo .dlm continua no seu computador.`)) return;
+  const address = window.DLM.Auth.getAddress();
+  if (!address) { msg("catalog-msg", "Faça login para excluir.", "error"); return; }
+  try {
+    await window.DLM.APIDLM.deleteBook(licenseId, address);
+    msg("catalog-msg", "Livro removido da biblioteca.", "success");
+    await loadCatalog();
+  } catch (e) {
+    msg("catalog-msg", "Erro ao excluir: " + e.message, "error");
+  }
 }
 
 function closePdfViewer() {
