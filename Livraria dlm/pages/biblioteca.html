@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>LivrosDLM — Minha Biblioteca</title>
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Inter:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet"/>
-  <link rel="stylesheet" href="../css/style.css?v=7"/>
+  <link rel="stylesheet" href="../css/style.css?v=8"/>
   <style>
     .lib-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:1.25rem; padding:0 2rem 3rem; }
     .lib-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; }
@@ -176,8 +176,8 @@
 
 <div id="toast-container"></div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-<script src="../js/api.js?v=7"></script>
-<script src="../js/app.js?v=7"></script>
+<script src="../js/api.js?v=8"></script>
+<script src="../js/app.js?v=8"></script>
 <script>
 const { Auth, APIBooks, APILicenses, APIDLM } = window.DLM;
 
@@ -278,6 +278,8 @@ async function loadLibrary(address) {
 
   booksToShow.forEach(item => {
     const date = item.purchasedAt ? new Date(item.purchasedAt).toLocaleDateString('pt-BR') : null;
+    const hasTitle = item.title && !item.title.startsWith('Licença #');
+    const editBtn  = hasTitle ? '' : `<button class="btn" onclick="editBookMeta(${JSON.stringify(item.licenseId)})">✏️ Editar título</button>`;
     const card = document.createElement('div');
     card.className = 'lib-card';
     card.innerHTML = `
@@ -290,11 +292,27 @@ async function loadLibrary(address) {
         <div class="lib-actions">
           <button class="btn btn-primary" onclick="openBook(${JSON.stringify(item.licenseId)},${JSON.stringify(item.title)})">📖 Ler</button>
           <button class="btn" onclick="openTransferModal(${JSON.stringify(item.licenseId)},${JSON.stringify(item.title)},${JSON.stringify(item.author)})">🔄 Transferir</button>
+          ${editBtn}
         </div>
         <div class="license-tag">License #${esc(item.licenseId)}${date ? ' · adquirido em ' + date : ''}</div>
       </div>`;
     grid.appendChild(card);
   });
+}
+
+async function editBookMeta(licenseId) {
+  const title = prompt('Título do livro:');
+  if (!title || !title.trim()) return;
+  const author = prompt('Autor (deixe em branco se não souber):') ?? '';
+  const address = Auth.getAddress();
+  if (!address) { toast('Faça login para editar.', 'err'); return; }
+  try {
+    await APIDLM.updateMetadata(licenseId, title.trim(), author.trim(), address);
+    toast('Título atualizado com sucesso!', 'ok');
+    await loadLibrary(address);
+  } catch (e) {
+    toast('Erro ao atualizar: ' + e.message, 'err');
+  }
 }
 
 function openBook(licenseId, title) {

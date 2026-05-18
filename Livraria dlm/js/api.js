@@ -340,6 +340,22 @@ const APIDLM = {
   },
 
   /**
+   * Atualiza o título e/ou autor de uma licença existente.
+   * Requer que ownerAddress seja o dono atual.
+   * @param {string} licenseId
+   * @param {string} title
+   * @param {string} author
+   * @param {string} ownerAddress — endereço Ethereum do dono atual
+   * @returns {{ licenseId, title, author }}
+   */
+  async updateMetadata(licenseId, title, author, ownerAddress) {
+    return drmFetch(`/licenses/${encodeURIComponent(licenseId)}/metadata`, {
+      method: 'PATCH',
+      body: JSON.stringify({ title, author, ownerAddress }),
+    });
+  },
+
+  /**
    * Busca todos os livros registrados para uma chave pública na DRM API.
    * Usado para listar os livros que o usuário possui antes de uma transferência.
    * @param {string} publicKey — endereço Ethereum do titular
