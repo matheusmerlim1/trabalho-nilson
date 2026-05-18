@@ -543,7 +543,13 @@ async function doTransfer(btn) {
 
   if (toAddr.toLowerCase() === me.wallet.toLowerCase())
     return msg("transfer-msg", "Não é possível transferir para você mesmo.", "error");
-  if (!confirm("Confirma a transferência? Você perderá o acesso ao livro.")) return;
+
+  // Pega o título do livro selecionado
+  const selEl = document.getElementById("transfer-token-select");
+  const selOpt = selEl.options[selEl.selectedIndex];
+  const bookTitle = selOpt?.textContent?.includes(' — ')
+    ? selOpt.textContent.split(' — ').slice(1).join(' — ')
+    : `Licença #${licenseId}`;
 
   loading(btn, true);
   msg("transfer-msg", "⏳ Verificando destinatário...", "info");
@@ -563,14 +569,20 @@ async function doTransfer(btn) {
       } catch { /* continua sem verificação do nome */ }
     }
 
+    loading(btn, false);
     if (!recipientName) {
       const continuar = confirm(
-        'Destinatário não encontrado na plataforma DRM.\n\n' +
-        'A transferência continuará apenas na DRM API (se MetaMask disponível).\n\n' +
-        'Continuar mesmo assim?'
+        `Você está transferindo o livro "${bookTitle}" para ${toAddr.slice(0, 10)}...\n\n` +
+        'Atenção: destinatário não encontrado na plataforma DRM.\n\n' +
+        'Continuar mesmo assim? Você perderá acesso ao livro.'
       );
-      if (!continuar) { loading(btn, false); msg("transfer-msg", "", ""); return; }
+      if (!continuar) { msg("transfer-msg", "", ""); return; }
+    } else {
+      if (!confirm(`Você está transferindo o livro "${bookTitle}" para ${recipientName}.\n\nDeseja confirmar? Você perderá acesso ao livro.`)) {
+        msg("transfer-msg", "", ""); return;
+      }
     }
+    loading(btn, true);
 
     // Assinar e transferir via APIDLM (requer MetaMask)
     if (window.ethereum) {
