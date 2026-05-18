@@ -63,9 +63,9 @@ cp .env.example .env
 
 ```
 Browser (index.html + pages/)
-    ↕ fetch / localStorage (modo demo)
+    ↕ fetch / localStorage (fallback offline)
 js/api.js  →  DLM PDF API  (https://dlm-pdf-server-production.up.railway.app/api/v1)
-               ↕ ethers.js
+               ↕ PostgreSQL (Railway — dados persistem entre reinícios)
            Smart Contract DLMBookstore.sol (ERC-721, Sepolia / local)
 ```
 
@@ -94,13 +94,18 @@ O botão **📖 Ler** na biblioteca abre o PDF diretamente na página:
 - Depende de MetaMask — sem MetaMask o botão mostra aviso
 - PDF.js CDN: `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js`
 
-### Modo demo / fallback (sem blockchain)
-`js/api.js` usa `localStorage` como fallback quando a API não responde:
-- Catálogo: `dlm_books_catalog` no localStorage (vazio por padrão)
-- Licenças: `dlm_my_licenses` no localStorage
-- Sessão: `dlm_token` e `dlm_address` no localStorage
-- `biblioteca.html` e `index.html`: busca blockchain-first via `APIDLM.busca()`; resultados positivos são cacheados em `dlm_busca_cache_{wallet}`; Railway reinicia → usa cache como fallback (não depende de exceção)
-- `dlm_address` é salvo no login (`dlmAuth` no `index.html` e `Auth.save()` em `api.js`) para que `Auth.getAddress()` funcione em todas as páginas
+### Lógica de biblioteca — fonte da verdade
+`biblioteca.html` e `index.html` usam flag `serverOnline` para decidir a fonte dos livros:
+- **Servidor online** (`APIDLM.busca()` responde): apenas livros do servidor são exibidos. localStorage `dlm_my_licenses` é completamente ignorado (evita "fantasmas").
+- **Servidor offline** (exceção no busca): usa cache `dlm_busca_cache_{wallet}` como fallback.
+- Cache é atualizado apenas quando o servidor retorna livros; limpo quando retorna lista vazia.
+- `dlm_address` salvo no login para que `Auth.getAddress()` funcione em todas as páginas.
+
+### Botão "✏️ Editar título"
+Aparece em `biblioteca.html` apenas para livros com `title: null` (exibidos como "Licença #N").
+- Abre `prompt()` para digitar título e autor
+- Chama `APIDLM.updateMetadata(licenseId, title, author, ownerAddress)` → `PATCH /licenses/:id/metadata`
+- Recarrega a biblioteca após salvar
 
 ### Smart Contract (`DLMBookstore.sol`)
 ERC-721 Ownable. Cada cópia de livro é um NFT transferível. Funções principais:
@@ -140,18 +145,26 @@ Para trocar os servidores em produção:
 | Método | Rota no servidor | Descrição |
 |--------|-----------------|-----------|
 | `APIDLM.registerUser(address, name, cpf)` | `POST /users/register` | Cadastra usuário |
-| `APIDLM.lookupUser(address)` | `GET /users/:address` | Consulta nome+CPF por endereço |
-| `APIDLM.encrypt(pdfBase64, publicKey, userName, userCPF, licenseId?, title?, author?)` | `POST /encrypt` | Encripta PDF → .dlm v3 (title e author são embutidos no arquivo se fornecidos) |
+| `APIDLM.lookupUser(address)` | `GET /users/:address` | Consulta nome+CPF; retorna `null` em 404 (não lança erro) |
+| `APIDLM.encrypt(pdfBase64, publicKey, userName, userCPF, licenseId?, title?, author?)` | `POST /encrypt` | Encripta PDF → .dlm v3; atualiza title/author em registros existentes com null |
 | `APIDLM.decrypt(dlmBase64, publicKey, signature, message)` | `POST /decrypt` | Decifra com cadeia de custódia |
+| `APIDLM.updateMetadata(licenseId, title, author, ownerAddress)` | `PATCH /licenses/:id/metadata` | Corrige title/author de livros sem metadados |
 | `APIDLM.busca(publicKey)` | `GET /busca?publicKey=` | Lista todos os livros (licenseId, title, author) cujo currentOwner é publicKey |
 | `APIDLM.previewTransfer(toPublicKey, licenseId)` | `POST /transfer/preview` | Consulta destinatário |
-| `APIDLM.transfer(fromKey, toKey, licenseId, sig, msg)` | `POST /transfer` | Executa transferência |
+| `APIDLM.transfer(fromKey, toKey, licenseId, sig, msg, title?, author?)` | `POST /transfer` | Executa transferência; preserva title/author existentes |
 
-Endpoint extra (consulta pública de posse):
+Endpoints extras:
 - `GET /licenses/public/:id` — retorna `{ licenseId, currentOwner: { address }, transferCount, createdAt }`
+- `GET /health` — inclui `storage: "postgres"|"filesystem"` e `db_error` (quando PostgreSQL falha)
 
-O servidor (`server.js`) também expõe rotas proxy em `/api/drm/*` para operações que precisam
-combinar DRM + blockchain (ex.: transferência que atualiza DRM + NFT on-chain).
+## Persistência — Railway + PostgreSQL
+
+O servidor usa PostgreSQL quando `DATABASE_URL` está definida na variável de ambiente do serviço Railway.
+
+- **URL pública** (usar no Railway Variables do servidor): `postgresql://...@yamanote.proxy.rlwy.net:18066/railway`
+- `db.js` tenta conexão sem SSL e depois com SSL — nunca crasha se PostgreSQL falhar
+- Fallback automático para filesystem quando banco indisponível
+- `GET /health` mostra `"storage": "postgres"` quando conectado, `"filesystem"` + `db_error` quando não
 
 ## GitHub & Auto-Sync
 
@@ -183,8 +196,7 @@ Claude Code também sincroniza ao encerrar a sessão via hook `Stop` em `.claude
    - [ ] `.env` não aparece no `git status`
    - [ ] `storage/` não aparece no `git status`
    - [ ] `js/api.js` aponta para as URLs corretas (API_BASE e DRM_API_BASE)
-   - [ ] Rotas proxy `/api/drm/*` respondem corretamente
-   - [ ] DRM API (`DRM_API_URL`) está acessível pelo servidor
+   - [ ] `GET /health` mostra `"storage": "postgres"` (não filesystem)
    - [ ] Contrato compila sem warnings (`npx hardhat compile`)
 4. Commit e push — o hook de post-commit empurra automaticamente
 
@@ -197,28 +209,25 @@ Claude Code também sincroniza ao encerrar a sessão via hook `Stop` em `.claude
 | Item | Versão atual | O que checar |
 |------|-------------|--------------|
 | Formato `.dlm` | **v3** | Nenhum arquivo deve gerar v1 ou v2; `APIDLM.encrypt` é a única rota de encriptação |
-| `js/api.js` | **?v=6** (cache-busting) | Todas as páginas HTML devem carregar com `<script src="../js/api.js?v=6">` |
-| `js/app.js` | **?v=6** (cache-busting) | Idem — `<script src="../js/app.js?v=6">` |
-| `css/style.css` | **?v=6** (cache-busting) | `<link rel="stylesheet" href="../css/style.css?v=6">` |
+| `js/api.js` | **?v=8** (cache-busting) | Todas as páginas HTML devem carregar com `<script src="../js/api.js?v=8">` |
+| `js/app.js` | **?v=8** (cache-busting) | Idem — `<script src="../js/app.js?v=8">` |
+| `css/style.css` | **?v=8** (cache-busting) | `<link rel="stylesheet" href="../css/style.css?v=8">` |
 | Endpoint de encriptação | **`APIDLM.encrypt`** | Nenhum código deve chamar rotas `/encrypt` legadas (v1/v2) diretamente |
 
 ### Como verificar
 
 ```bash
-# Checar se alguma página ainda usa scripts sem cache-busting
-grep -rn "api.js\"" pages/ index.html
-grep -rn "app.js\"" pages/ index.html
-grep -rn "style.css\"" pages/ index.html
+# Checar versão atual do cache-busting
+grep -rn "api.js?v=" pages/ index.html
 
-# Checar se ainda existe chamada a rotas v1/v2 legadas
-grep -rn "/encrypt" js/api.js
-grep -rn "dlm-v1\|dlm-v2\|version.*1\|version.*2" js/
+# Checar se servidor está com PostgreSQL
+curl https://dlm-pdf-server-production.up.railway.app/api/v1/health | grep storage
 
 # Checar se publisher.html usa APIDLM.encrypt (e não rota direta)
 grep -n "APIDLM.encrypt\|/publisher/encrypt\|/encrypt" pages/publisher.html
 
-# Checar se biblioteca.html usa o fluxo correto (busca → previewTransfer → transfer)
-grep -n "APIDLM.busca\|APIDLM.previewTransfer\|APIDLM.transfer" pages/biblioteca.html
+# Checar se biblioteca.html usa serverOnline e updateMetadata
+grep -n "serverOnline\|updateMetadata\|editBookMeta" pages/biblioteca.html
 ```
 
 **Regra:** ao incrementar qualquer versão de script ou formato, atualizar o sufixo `?v=N` em **todos** os arquivos HTML do projeto de uma vez. Nunca deixar páginas com versões diferentes entre si.
@@ -262,10 +271,13 @@ Não acumular alterações sem commitar. Cada conjunto de mudanças relacionadas
 | Feature | Arquivo | Detalhe |
 |---------|---------|---------|
 | Cadastro de nome+CPF no login | `pages/auth.html` + `index.html` | Modal DRM obrigatório; salvo via `APIDLM.registerUser()` |
-| Biblioteca lista livros da blockchain | `pages/biblioteca.html` + `index.html` | `APIDLM.busca()` + cache `dlm_busca_cache_{wallet}` + fallback localStorage |
+| Biblioteca lista livros da blockchain | `pages/biblioteca.html` + `index.html` | `APIDLM.busca()` + flag `serverOnline` + cache fallback offline |
 | Leitor DLM integrado na biblioteca | `pages/biblioteca.html` | Seleção .dlm → MetaMask sign → `APIDLM.decrypt()` → PDF.js |
 | Transferência com nome do destinatário | `pages/biblioteca.html` + `index.html` | `APIDLM.previewTransfer()` → confirma nome → `APIDLM.transfer()` |
+| Título/autor preservados na transferência | DLM PDF API `transferLicense` | `transferLicense` preserva metadados existentes; title/author passados pelo frontend |
 | Re-encriptação automática no decrypt | DLM PDF API `POST /decrypt` | Servidor re-cifra para o novo dono e atualiza `encryptedWithAddress` |
+| Editar título de livros sem metadados | `pages/biblioteca.html` | Botão "✏️ Editar título" → `APIDLM.updateMetadata()` → `PATCH /licenses/:id/metadata` |
+| Persistência PostgreSQL no Railway | DLM PDF API `db.js` | Dados não se perdem ao reiniciar; fallback filesystem automático |
 | DLM-PDF Platform verifica posse | `DLM PDF API/client/index.html` | Usa `POST /decrypt` — servidor verifica `currentOwner` no registro |
 | Cadeia de custódia no decrypt | DLM PDF API `decryptDLMv3WithChain` | Tenta encryptedWithAddress + histórico reverso |
 
