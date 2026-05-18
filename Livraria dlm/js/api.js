@@ -340,6 +340,19 @@ const APIDLM = {
   },
 
   /**
+   * Remove uma licença do registro (apenas o dono atual pode excluir).
+   * @param {string} licenseId
+   * @param {string} ownerAddress — endereço Ethereum do dono atual
+   * @returns {{ deleted: boolean, licenseId: string }}
+   */
+  async deleteBook(licenseId, ownerAddress) {
+    return drmFetch(`/licenses/${encodeURIComponent(licenseId)}`, {
+      method: 'DELETE',
+      body: JSON.stringify({ ownerAddress }),
+    });
+  },
+
+  /**
    * Atualiza o título e/ou autor de uma licença existente.
    * Requer que ownerAddress seja o dono atual.
    * @param {string} licenseId

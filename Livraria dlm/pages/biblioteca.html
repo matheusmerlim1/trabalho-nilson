@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>LivrosDLM — Minha Biblioteca</title>
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Inter:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet"/>
-  <link rel="stylesheet" href="../css/style.css?v=8"/>
+  <link rel="stylesheet" href="../css/style.css?v=9"/>
   <style>
     .lib-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:1.25rem; padding:0 2rem 3rem; }
     .lib-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; }
@@ -176,8 +176,8 @@
 
 <div id="toast-container"></div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-<script src="../js/api.js?v=8"></script>
-<script src="../js/app.js?v=8"></script>
+<script src="../js/api.js?v=9"></script>
+<script src="../js/app.js?v=9"></script>
 <script>
 const { Auth, APIBooks, APILicenses, APIDLM } = window.DLM;
 
@@ -293,11 +293,25 @@ async function loadLibrary(address) {
           <button class="btn btn-primary" onclick="openBook(${JSON.stringify(item.licenseId)},${JSON.stringify(item.title)})">📖 Ler</button>
           <button class="btn" onclick="openTransferModal(${JSON.stringify(item.licenseId)},${JSON.stringify(item.title)},${JSON.stringify(item.author)})">🔄 Transferir</button>
           ${editBtn}
+          <button class="btn" style="color:var(--red);border-color:var(--red)" onclick="deleteBook(${JSON.stringify(item.licenseId)},${JSON.stringify(item.title)})">🗑️ Excluir</button>
         </div>
         <div class="license-tag">License #${esc(item.licenseId)}${date ? ' · adquirido em ' + date : ''}</div>
       </div>`;
     grid.appendChild(card);
   });
+}
+
+async function deleteBook(licenseId, title) {
+  if (!confirm(`Excluir "${title || 'este livro'}" da biblioteca?\n\nEsta ação remove o registro do servidor. O arquivo .dlm continua no seu computador.`)) return;
+  const address = Auth.getAddress();
+  if (!address) { toast('Faça login para excluir.', 'err'); return; }
+  try {
+    await APIDLM.deleteBook(licenseId, address);
+    toast('Livro removido da biblioteca.', 'ok');
+    await loadLibrary(address);
+  } catch (e) {
+    toast('Erro ao excluir: ' + e.message, 'err');
+  }
 }
 
 async function editBookMeta(licenseId) {
