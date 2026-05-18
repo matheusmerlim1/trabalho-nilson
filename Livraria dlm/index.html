@@ -183,7 +183,7 @@
   <iframe class="pdf-frame" id="pdf-frame" title="Leitor DLM"></iframe>
 </div>
 
-<script src="js/api.js?v=6"></script>
+<script src="js/api.js?v=7"></script>
 <script>
 const RAILWAY = 'https://dlm-pdf-server-production.up.railway.app/api/v1';
 
@@ -209,17 +209,24 @@ function enterApp() {
 let _drmRegResolve = null;
 
 async function ensureDrmRegistration(address) {
+  // undefined = erro de rede, null = não cadastrado no banco, objeto = encontrado
+  let user = undefined;
   try {
-    const user = await window.DLM.APIDLM.lookupUser(address);
-    if (user && user.name) {
-      me.username = user.name;
-      localStorage.setItem("dlm_user", JSON.stringify(me));
-      document.getElementById("user-badge").textContent = `👤 ${user.name}`;
-      return;
-    }
-  } catch { /* não cadastrado ou API fora */ }
-  // Mostra modal de cadastro (não bloqueia a UI)
-  document.getElementById("drm-reg-modal").style.display = "flex";
+    user = await window.DLM.APIDLM.lookupUser(address);
+  } catch { /* API fora do ar — não exibe modal */ }
+
+  if (user && user.name) {
+    me.username = user.name;
+    localStorage.setItem("dlm_user", JSON.stringify(me));
+    document.getElementById("user-badge").textContent = `👤 ${user.name}`;
+    return;
+  }
+
+  if (user === null) {
+    // API online mas endereço não cadastrado — exibe modal de cadastro
+    document.getElementById("drm-reg-modal").style.display = "flex";
+  }
+  // user === undefined (API fora): não exibe modal, não atrapalha o uso offline
 }
 
 async function confirmDrmReg() {

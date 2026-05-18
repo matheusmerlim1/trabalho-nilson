@@ -252,9 +252,17 @@ const APIDLM = {
 
   /**
    * Consulta nome e CPF de um endereço Ethereum.
+   * Retorna null se o endereço não estiver cadastrado (404).
+   * Lança erro apenas em falhas reais de rede ou servidor.
    */
   async lookupUser(address) {
-    return drmFetch(`/users/${encodeURIComponent(address)}`);
+    const res = await fetch(`${DRM_API_BASE}/users/${encodeURIComponent(address)}`, {
+      headers: { 'Content-Type': 'application/json' },
+    });
+    if (res.status === 404) return null;
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `Erro HTTP ${res.status}`);
+    return data;
   },
 
   /**
