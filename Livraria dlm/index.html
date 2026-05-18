@@ -402,9 +402,10 @@ async function getUserBooks() {
     };
   });
 
+  // Com servidor online, licenças locais são ignoradas — banco é fonte da verdade
   const serverIds = new Set(serverMapped.map(b => String(b.licenseId)));
   const localLics = window.DLM.APILicenses.getMyLicenses();
-  const localOnly = localLics.map(lic => {
+  const localOnly = serverOnline ? [] : localLics.map(lic => {
     if (serverIds.has(String(lic.licenseId))) return null;
     const book = window.DLM.APIBooks.getById(lic.bookId)
       || window.DLM.APIBooks.getAll().find(b => String(b.licenseId) === String(lic.licenseId));

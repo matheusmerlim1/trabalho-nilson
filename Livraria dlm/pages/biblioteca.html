@@ -248,8 +248,10 @@ async function loadLibrary(address) {
     };
   });
 
+  // Licenças locais só são exibidas quando o servidor está offline
+  // Com servidor online, apenas o banco é fonte da verdade — licenças locais são fantasmas
   const serverIds = new Set(serverMapped.map(b => String(b.licenseId)));
-  const localOnly = localLics
+  const localOnly = serverOnline ? [] : localLics
     .filter(lic => !serverIds.has(String(lic.licenseId)))
     .map(lic => {
       const book = APIBooks.getById(lic.bookId);
