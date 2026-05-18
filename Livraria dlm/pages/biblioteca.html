@@ -211,15 +211,21 @@ async function loadLibrary(address) {
   grid.innerHTML = '<p style="grid-column:1/-1;padding:2rem;color:var(--muted);font-size:.82rem;text-align:center">⏳ Carregando biblioteca da blockchain...</p>';
 
   let chainBooks = [];
+  let serverOnline = false;
   try {
     const result = await APIDLM.busca(address);
-    chainBooks = result.books || [];
+    chainBooks    = result.books || [];
+    serverOnline  = true;
+    // Atualiza cache apenas quando o servidor retorna livros (com title/author)
     if (chainBooks.length > 0)
       localStorage.setItem(cacheKey, JSON.stringify(chainBooks));
+    else
+      localStorage.removeItem(cacheKey); // limpa cache obsoleto quando servidor está vazio
   } catch { /* servidor fora */ }
 
-  // Servidor retornou vazio (Railway reiniciou): usa cache da última sessão
-  if (chainBooks.length === 0) {
+  // Usa cache SOMENTE quando o servidor estiver offline (exceção acima)
+  // Com PostgreSQL, servidor online + lista vazia = usuário sem livros (não phantom cache)
+  if (!serverOnline) {
     try {
       const cached = localStorage.getItem(cacheKey);
       if (cached) chainBooks = JSON.parse(cached);

@@ -371,15 +371,19 @@ function findLocalBook(licenseId) {
 async function getUserBooks() {
   const cacheKey = `dlm_busca_cache_${(me.wallet || '').toLowerCase()}`;
   let chainBooks = [];
+  let serverOnline = false;
   try {
     const result = await window.DLM.APIDLM.busca(me.wallet);
-    chainBooks = result.books || [];
+    chainBooks   = result.books || [];
+    serverOnline = true;
     if (chainBooks.length > 0)
       localStorage.setItem(cacheKey, JSON.stringify(chainBooks));
+    else
+      localStorage.removeItem(cacheKey); // limpa cache obsoleto quando servidor está vazio
   } catch { /* servidor fora */ }
 
-  // Servidor retornou vazio (Railway reiniciou): usa cache da última sessão
-  if (chainBooks.length === 0) {
+  // Usa cache SOMENTE quando o servidor estiver offline
+  if (!serverOnline) {
     try {
       const cached = localStorage.getItem(cacheKey);
       if (cached) chainBooks = JSON.parse(cached);
