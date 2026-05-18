@@ -107,6 +107,19 @@ Aparece em `biblioteca.html` apenas para livros com `title: null` (exibidos como
 - Chama `APIDLM.updateMetadata(licenseId, title, author, ownerAddress)` → `PATCH /licenses/:id/metadata`
 - Recarrega a biblioteca após salvar
 
+### Botão "🗑️ Excluir"
+Aparece em todos os cards de `index.html` e `biblioteca.html`.
+- Confirma com o usuário antes de excluir
+- Chama `APIDLM.deleteBook(licenseId, ownerAddress)` → `DELETE /licenses/:id`
+- Servidor verifica que ownerAddress é o dono atual (403 se não for)
+- Recarrega a biblioteca após excluir
+
+### Atenção: botões em cards HTML — não usar JSON.stringify em onclick
+`JSON.stringify("string")` produz aspas duplas que quebram atributos `onclick="..."` delimitados por `"`.
+- **`biblioteca.html`**: todos os botões dos cards usam `addEventListener()` fechando sobre o objeto `item` — sem escaping necessário
+- **`index.html`**: botão Excluir usa `data-lid`/`data-title` + `onclick="deleteBook(this.dataset.lid, this.dataset.title)"`
+- Sempre usar uma dessas abordagens ao passar strings em eventos de cards gerados dinamicamente
+
 ### Smart Contract (`DLMBookstore.sol`)
 ERC-721 Ownable. Cada cópia de livro é um NFT transferível. Funções principais:
 - `registerUser(username)` — cadastra carteira com username
@@ -152,6 +165,7 @@ Para trocar os servidores em produção:
 | `APIDLM.busca(publicKey)` | `GET /busca?publicKey=` | Lista todos os livros (licenseId, title, author) cujo currentOwner é publicKey |
 | `APIDLM.previewTransfer(toPublicKey, licenseId)` | `POST /transfer/preview` | Consulta destinatário |
 | `APIDLM.transfer(fromKey, toKey, licenseId, sig, msg, title?, author?)` | `POST /transfer` | Executa transferência; preserva title/author existentes |
+| `APIDLM.deleteBook(licenseId, ownerAddress)` | `DELETE /licenses/:id` | Remove licença do registro; requer ownerAddress = dono atual |
 
 Endpoints extras:
 - `GET /licenses/public/:id` — retorna `{ licenseId, currentOwner: { address }, transferCount, createdAt }`
@@ -209,9 +223,9 @@ Claude Code também sincroniza ao encerrar a sessão via hook `Stop` em `.claude
 | Item | Versão atual | O que checar |
 |------|-------------|--------------|
 | Formato `.dlm` | **v3** | Nenhum arquivo deve gerar v1 ou v2; `APIDLM.encrypt` é a única rota de encriptação |
-| `js/api.js` | **?v=8** (cache-busting) | Todas as páginas HTML devem carregar com `<script src="../js/api.js?v=8">` |
-| `js/app.js` | **?v=8** (cache-busting) | Idem — `<script src="../js/app.js?v=8">` |
-| `css/style.css` | **?v=8** (cache-busting) | `<link rel="stylesheet" href="../css/style.css?v=8">` |
+| `js/api.js` | **?v=10** (cache-busting) | Todas as páginas HTML devem carregar com `<script src="../js/api.js?v=10">` |
+| `js/app.js` | **?v=10** (cache-busting) | Idem — `<script src="../js/app.js?v=10">` |
+| `css/style.css` | **?v=10** (cache-busting) | `<link rel="stylesheet" href="../css/style.css?v=10">` |
 | Endpoint de encriptação | **`APIDLM.encrypt`** | Nenhum código deve chamar rotas `/encrypt` legadas (v1/v2) diretamente |
 
 ### Como verificar
@@ -277,6 +291,7 @@ Não acumular alterações sem commitar. Cada conjunto de mudanças relacionadas
 | Título/autor preservados na transferência | DLM PDF API `transferLicense` | `transferLicense` preserva metadados existentes; title/author passados pelo frontend |
 | Re-encriptação automática no decrypt | DLM PDF API `POST /decrypt` | Servidor re-cifra para o novo dono e atualiza `encryptedWithAddress` |
 | Editar título de livros sem metadados | `pages/biblioteca.html` | Botão "✏️ Editar título" → `APIDLM.updateMetadata()` → `PATCH /licenses/:id/metadata` |
+| Excluir livro da biblioteca | `pages/biblioteca.html` + `index.html` | Botão "🗑️ Excluir" → `APIDLM.deleteBook()` → `DELETE /licenses/:id`; servidor verifica ownership |
 | Persistência PostgreSQL no Railway | DLM PDF API `db.js` | Dados não se perdem ao reiniciar; fallback filesystem automático |
 | DLM-PDF Platform verifica posse | `DLM PDF API/client/index.html` | Usa `POST /decrypt` — servidor verifica `currentOwner` no registro |
 | Cadeia de custódia no decrypt | DLM PDF API `decryptDLMv3WithChain` | Tenta encryptedWithAddress + histórico reverso |
