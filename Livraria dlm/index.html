@@ -445,7 +445,7 @@ async function loadCatalog() {
           <div class="book-price"><span class="tag tag-owned">✓ Em posse</span></div>
           <div class="book-actions">
             <button class="btn btn-gold btn-sm" onclick="goTransferByLicense('${b.licenseId}')">↗️ Transferir</button>
-            <button class="btn btn-sm" style="color:var(--red,#e74c3c);border-color:var(--red,#e74c3c)" onclick="deleteBook(${JSON.stringify(b.licenseId)},${JSON.stringify(b.title)})">🗑️ Excluir</button>
+            <button class="btn btn-sm" style="color:var(--red,#e74c3c);border-color:var(--red,#e74c3c)" data-lid="${b.licenseId}" data-title="${(b.title||'').replace(/"/g,'&quot;')}" onclick="deleteBook(this.dataset.lid,this.dataset.title)">🗑️ Excluir</button>
           </div>
         </div>
       </div>`).join('');

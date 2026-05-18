@@ -279,7 +279,6 @@ async function loadLibrary(address) {
   booksToShow.forEach(item => {
     const date = item.purchasedAt ? new Date(item.purchasedAt).toLocaleDateString('pt-BR') : null;
     const hasTitle = item.title && !item.title.startsWith('Licença #');
-    const editBtn  = hasTitle ? '' : `<button class="btn" onclick="editBookMeta(${JSON.stringify(item.licenseId)})">✏️ Editar título</button>`;
     const card = document.createElement('div');
     card.className = 'lib-card';
     card.innerHTML = `
@@ -290,13 +289,18 @@ async function loadLibrary(address) {
         <div class="lib-title">${esc(item.title)}</div>
         <div class="lib-author">${esc(item.author)}</div>
         <div class="lib-actions">
-          <button class="btn btn-primary" onclick="openBook(${JSON.stringify(item.licenseId)},${JSON.stringify(item.title)})">📖 Ler</button>
-          <button class="btn" onclick="openTransferModal(${JSON.stringify(item.licenseId)},${JSON.stringify(item.title)},${JSON.stringify(item.author)})">🔄 Transferir</button>
-          ${editBtn}
-          <button class="btn" style="color:var(--red);border-color:var(--red)" onclick="deleteBook(${JSON.stringify(item.licenseId)},${JSON.stringify(item.title)})">🗑️ Excluir</button>
+          <button class="btn btn-primary">📖 Ler</button>
+          <button class="btn">🔄 Transferir</button>
+          ${hasTitle ? '' : '<button class="btn btn-edit-meta">✏️ Editar título</button>'}
+          <button class="btn btn-del" style="color:var(--red);border-color:var(--red)">🗑️ Excluir</button>
         </div>
         <div class="license-tag">License #${esc(item.licenseId)}${date ? ' · adquirido em ' + date : ''}</div>
       </div>`;
+    const btns = card.querySelectorAll('.btn');
+    btns[0].addEventListener('click', () => openBook(item.licenseId, item.title));
+    btns[1].addEventListener('click', () => openTransferModal(item.licenseId, item.title, item.author));
+    if (!hasTitle) card.querySelector('.btn-edit-meta').addEventListener('click', () => editBookMeta(item.licenseId));
+    card.querySelector('.btn-del').addEventListener('click', () => deleteBook(item.licenseId, item.title));
     grid.appendChild(card);
   });
 }
